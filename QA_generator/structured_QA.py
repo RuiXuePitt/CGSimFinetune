@@ -2,66 +2,19 @@ import sqlite3
 import json
 from pathlib import Path
 import random
-
+import sys
 current_dir = Path(__file__).parent
+sys.path.append(str(current_dir))
+import QA_Templates as tp
+
+tool_dir = current_dir.parent / "Tools"
+sys.path.append(str(tool_dir))
+import DBTool as dbt
+
 db_path = current_dir.parent / "resources" / "CGsimSite.db"
+dbt.set_db_path(str(db_path))
 output = current_dir.parent / "resources" / "ques_sql.jsonl"
 
-# question, sql, think1, think2, tool1, tool2
-TEMPLATE_JOBALLOCATION_JOBID = [
-    (
-        "What is the allocation job id at site {site}?",
-        "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'allocation', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'allocation', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'job id', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
-        "check_JobAllocation",
-        "execute_sql",
-    ),
-    (
-        "At site {site}, what is the allocated job id?",
-        "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'allocated', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'allocated', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'job id', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
-        "check_JobAllocation",
-        "execute_sql",
-    ),
-    (
-        "List the allocated JOB_IDs for JobAllocation events at site {site}.",
-        "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'JobAllocation events', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'JobAllocation events', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'JOB_IDs', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
-        "check_JobAllocation",
-        "execute_sql",
-    ),
-    (
-        "Which job IDs were allocated at {site} site?",
-        "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'allocated', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'allocated', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'job IDs', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
-        "check_JobAllocation",
-        "execute_sql",
-    )
-]
 def randQA_joballocation_jobid(amount: int, cursor: sqlite3.Cursor):
     cmd = """
     SELECT json_extract(METADATA, '$.site') AS site FROM EVENTS WHERE EVENT = 'JobAllocation';
@@ -70,7 +23,7 @@ def randQA_joballocation_jobid(amount: int, cursor: sqlite3.Cursor):
     sites = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(TEMPLATE_JOBALLOCATION_JOBID)
+        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_JOBALLOCATION_JOBID)
         site = random.choice(sites)
         temp_Q = temp_Q.format(site = site)
         temp_A = temp_A.format(site = site)
@@ -90,58 +43,6 @@ resource_field_allocation = [
     {"site": ["site name", "site"]},
     {"host": ["host name", "host"]}
 ]
-TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION = [
-    (
-        "For job {jobid}, what is the {field1} in the JobAllocation record?",
-
-        "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS value "
-        "FROM EVENTS WHERE EVENT = 'JobAllocation' AND JOB_ID = {jobid};",
-
-        "Let's think step by step.\n"
-        "According to 'JobAllocation', JobAllocation data structure should be checked.\n",
-
-        "Let's think step by step.\n"
-        "According to 'JobAllocation', EVENT='JobAllocation' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-        
-        "check_JobAllocation",
-        "execute_sql"
-    ),
-    (
-        "For job {jobid}, what is the recorded {field1}?",
-
-        "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS {field2} FROM EVENTS WHERE EVENT = 'JobAllocation' AND JOB_ID = {jobid};",
-
-        "Let's think step by step.\n"
-        "The EVENT type is not specified. Therefore, all available event types and their data structures should be checked.\n",
-
-        "Let's think step by step.\n"
-        "According to checked data structure, {field1} may be related to {field2} in EVENT = 'JobAllocation'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-        
-        "check_All",
-        "execute_sql"
-    ),
-    (
-        "For the allocation of job {jobid}, show the {field1} from the metadata.",
-
-        "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS {field2} "
-        "FROM EVENTS WHERE EVENT = 'JobAllocation' AND JOB_ID = {jobid};",
-
-        "Let's think step by step.\n"
-        "According to 'allocation', JobAllocation data structure should be checked.\n",
-
-        "Let's think step by step.\n"
-        "According to 'allocation', EVENT = 'JobAllocation' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-
-        "check_JobAllocation",
-        "execute_sql"
-    )
-]
 def randQA_joballocation_resource_extraction(amount: int, cursor: sqlite3.Cursor):
     cmd = """
     SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation';
@@ -150,7 +51,7 @@ def randQA_joballocation_resource_extraction(amount: int, cursor: sqlite3.Cursor
     ids = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION)
+        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION)
         item_field = random.choice(resource_field_allocation)
         field2 = list(item_field.keys())[0]
         field1 = random.choice(item_field[field2])
@@ -174,68 +75,15 @@ resource_field_transfer = [
     {"source_site": ["source site", "start site", "source_site", "sending site"]},
     {"latency": ["latency", "latacy", "latent time"]}
 ]
-TEMPLATE_FILETRANSFER_MIX = [
-    (
-        "What is the {field1} of job {jobid} in the file transfer event?",
-        "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS {field2} FROM EVENTS "
-        "WHERE EVENT = 'FileTransfer' "
-        "AND JOB_ID = {jobid} "
-        "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "According to 'file transfer', FileTransfer data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'file transfer', EVENT = 'FileTransfer' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-        "check_FileTransfer",
-        "execute_sql"
-    ),
-    (
-        "What is the {field1} of job {jobid}?",
-        "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS {field2} FROM EVENTS "
-        "WHERE EVENT = 'FileTransfer' "
-        "AND JOB_ID = {jobid} "
-        "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "The EVENT type is not specified. Therefore, all available event types and their data structures should be checked.\n",
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileTransfer'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-        "check_All",
-        "execute_sql"
-    ),
-    (
-        "For job {jobid}, what is the {field1} during transfer?",
-        "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS {field2} FROM EVENTS "
-        "WHERE EVENT = 'FileTransfer' "
-        "AND JOB_ID = {jobid} "
-        "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-
-        # think1 (conservative trigger)
-        "Let's think step by step.\n"
-        "According to 'transfer', the EVENT type may be FileTransfer but is not certain.\n"
-        "Therefore, all available event types and their data structures should be checked.\n",
-
-        # think2 (commit after structure check; tool1res comes as next-turn input)
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileTransfer'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-
-        "check_All",
-        "execute_sql",
-    )
-]   
 def randQA_filetransfer_mix(amount: int, cursor: sqlite3.Cursor):
     cmd = """
-    SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation';
+    SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'FileTransfer';
     """
     cursor.execute(cmd)
     ids = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(TEMPLATE_FILETRANSFER_MIX)
+        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_FILETRANSFER_MIX)
         item_field = random.choice(resource_field_transfer)
         field2 = list(item_field.keys())[0]
         field1 = random.choice(item_field[field2])
@@ -252,6 +100,95 @@ def randQA_filetransfer_mix(amount: int, cursor: sqlite3.Cursor):
     return
 
 
+resource_field_read = [
+    {"duration":["file reading time", "read time", "time for file reading", "file read duration"]},
+    {"disk": ["disk name", "file disk"]},
+    {"disk_read_bw": ["read band width", "file read bandwidth", "disk reading band width", "disk read bandwidth"]}
+]
+def randQA_fileread_mix(amount: int, cursor: sqlite3.Cursor):
+    cmd = """
+    SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'FileRead';
+    """
+    cursor.execute(cmd)
+    ids = [it[0] for it in cursor.fetchall()]
+    samples = []
+    for _ in range(amount):
+        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_FILEREAD_MIX)
+        item_field = random.choice(resource_field_read)
+        field2 = list(item_field.keys())[0]
+        field1 = random.choice(item_field[field2])
+        jid = random.choice(ids)
+        temp_Q = temp_Q.format(field1=field1, jobid=jid)
+        temp_A = temp_A.format(field2=field2, jobid=jid)
+        think1 = think1.format(field1=field1, field2=field2)
+        think2 = think2.format(field1=field1, field2=field2, jobid=jid)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+
+    with open(str(output), "a", encoding="utf-8") as f:
+        for s in samples:
+            f.write(json.dumps(s) + "\n")
+    return
+
+
+resource_field_write = [
+    {"duration":["file writing time", "write time", "time for file writing", "file write duration"]},
+    {"disk": ["disk name", "file disk"]},
+    {"disk_write_bw": ["write bandwidth", "file write bandwidth", "disk writing band width", "disk write bandwidth"]}
+]
+def randQA_filewrite_mix(amount: int, cursor: sqlite3.Cursor):
+    cmd = """
+    SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'FileWrite';
+    """
+    cursor.execute(cmd)
+    ids = [it[0] for it in cursor.fetchall()]
+    samples = []
+    for _ in range(amount):
+        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_FILEWRITE_MIX)
+        item_field = random.choice(resource_field_write)
+        field2 = list(item_field.keys())[0]
+        field1 = random.choice(item_field[field2])
+        jid = random.choice(ids)
+        temp_Q = temp_Q.format(field1=field1, jobid=jid)
+        temp_A = temp_A.format(field2=field2, jobid=jid)
+        think1 = think1.format(field1=field1, field2=field2)
+        think2 = think2.format(field1=field1, field2=field2, jobid=jid)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+
+    with open(str(output), "a", encoding="utf-8") as f:
+        for s in samples:
+            f.write(json.dumps(s) + "\n")
+    return
+
+resource_field_execution = [
+    {"duration":["execution time", "run time", "duration"]},
+    {"total_queue_time": ["queue time", "total queue time"]},
+    {"speed": ["speed", "cpu speed"]},
+    {"flops": ["flops", "compute flops"]}
+]
+def randQA_jobexecution_mix(amount: int, cursor: sqlite3.Cursor):
+    cmd = """
+    SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobExecution';
+    """
+    cursor.execute(cmd)
+    ids = [it[0] for it in cursor.fetchall()]
+    samples = []
+    for _ in range(amount):
+        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_JOBEXECUTION_MIX)
+        item_field = random.choice(resource_field_execution)
+        field2 = list(item_field.keys())[0]
+        field1 = random.choice(item_field[field2])
+        jid = random.choice(ids)
+        temp_Q = temp_Q.format(field1=field1, jobid=jid)
+        temp_A = temp_A.format(field2=field2, jobid=jid)
+        think1 = think1.format(field1=field1, field2=field2)
+        think2 = think2.format(field1=field1, field2=field2, jobid=jid)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+
+    with open(str(output), "a", encoding="utf-8") as f:
+        for s in samples:
+            f.write(json.dumps(s) + "\n")
+    return
+
 def checksql(cursor: sqlite3.Cursor):
     records = []
     with open(str(output), 'r') as f:
@@ -264,16 +201,24 @@ def checksql(cursor: sqlite3.Cursor):
             print(f"Please check {i}-th {record}")
     return
 
-def main(cursor: sqlite3.Cursor):
-    randQA_joballocation_jobid(10, cursor)
-    randQA_joballocation_resource_extraction(10, cursor)
-    randQA_filetransfer_mix(10, cursor)
+def main():
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # randQA_joballocation_jobid(10, cursor)
+    # randQA_joballocation_resource_extraction(10, cursor)
+    # randQA_filetransfer_mix(10, cursor)
+    # randQA_fileread_mix(10, cursor)
+    # randQA_jobexecution_mix(10, cursor)
+    # checksql(cursor)
+
+    result = dbt.check_All(cursor)
+    for _ in result:
+        print(_)
+
+    cursor.close()
+    conn.close()
     return
 
 if __name__ == "__main__":
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    main(cursor)
-    # checksql(cursor)
-    cursor.close()
-    conn.close()
+    main()
