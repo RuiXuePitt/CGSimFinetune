@@ -23,11 +23,13 @@ def randQA_joballocation_jobid(amount: int, cursor: sqlite3.Cursor):
     sites = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_JOBALLOCATION_JOBID)
+        temp_Q, temp_A, think1, think2, tool1, tool2, ans = random.choice(tp.TEMPLATE_JOBALLOCATION_JOBID)
         site = random.choice(sites)
         temp_Q = temp_Q.format(site = site)
         temp_A = temp_A.format(site = site)
-        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+        row = dbt.execute_sql(cursor, temp_A)[0][0]
+        ans = ans.format(site = site, ans = row)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2, "answer": ans})
 
     with open(str(output), "a", encoding="utf-8") as f:
         for s in samples:
@@ -51,7 +53,7 @@ def randQA_joballocation_resource_extraction(amount: int, cursor: sqlite3.Cursor
     ids = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION)
+        temp_Q, temp_A, think1, think2, tool1, tool2, ans = random.choice(tp.TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION)
         item_field = random.choice(resource_field_allocation)
         field2 = list(item_field.keys())[0]
         field1 = random.choice(item_field[field2])
@@ -60,7 +62,9 @@ def randQA_joballocation_resource_extraction(amount: int, cursor: sqlite3.Cursor
         temp_A = temp_A.format(field2=field2, jobid=jid)
         think1 = think1.format(field1=field1, field2=field2)
         think2 = think2.format(field1=field1, field2=field2, jobid=jid)
-        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+        row = dbt.execute_sql(cursor, temp_A)[0][0]
+        ans = ans.format(field1 = field1, field2 = field2, jobid = jid, ans = row)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2, "answer": ans})
 
     with open(str(output), "a", encoding="utf-8") as f:
         for s in samples:
@@ -83,7 +87,7 @@ def randQA_filetransfer_mix(amount: int, cursor: sqlite3.Cursor):
     ids = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_FILETRANSFER_MIX)
+        temp_Q, temp_A, think1, think2, tool1, tool2, ans = random.choice(tp.TEMPLATE_FILETRANSFER_MIX)
         item_field = random.choice(resource_field_transfer)
         field2 = list(item_field.keys())[0]
         field1 = random.choice(item_field[field2])
@@ -92,7 +96,9 @@ def randQA_filetransfer_mix(amount: int, cursor: sqlite3.Cursor):
         temp_A = temp_A.format(field2=field2, jobid=jid)
         think1 = think1.format(field1=field1, field2=field2)
         think2 = think2.format(field1=field1, field2=field2, jobid=jid)
-        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+        row = dbt.execute_sql(cursor, temp_A)[0][0]
+        ans = ans.format(field1 = field1, field2 = field2, jobid = jid, ans = row)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2, "answer": ans})
 
     with open(str(output), "a", encoding="utf-8") as f:
         for s in samples:
@@ -113,7 +119,7 @@ def randQA_fileread_mix(amount: int, cursor: sqlite3.Cursor):
     ids = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_FILEREAD_MIX)
+        temp_Q, temp_A, think1, think2, tool1, tool2, ans = random.choice(tp.TEMPLATE_FILEREAD_MIX)
         item_field = random.choice(resource_field_read)
         field2 = list(item_field.keys())[0]
         field1 = random.choice(item_field[field2])
@@ -122,7 +128,9 @@ def randQA_fileread_mix(amount: int, cursor: sqlite3.Cursor):
         temp_A = temp_A.format(field2=field2, jobid=jid)
         think1 = think1.format(field1=field1, field2=field2)
         think2 = think2.format(field1=field1, field2=field2, jobid=jid)
-        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+        row = dbt.execute_sql(cursor, temp_A)[0][0]
+        ans = ans.format(field1 = field1, field2 = field2, jobid = jid, ans = row)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2, "answer": ans})
 
     with open(str(output), "a", encoding="utf-8") as f:
         for s in samples:
@@ -143,7 +151,7 @@ def randQA_filewrite_mix(amount: int, cursor: sqlite3.Cursor):
     ids = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_FILEWRITE_MIX)
+        temp_Q, temp_A, think1, think2, tool1, tool2, ans = random.choice(tp.TEMPLATE_FILEWRITE_MIX)
         item_field = random.choice(resource_field_write)
         field2 = list(item_field.keys())[0]
         field1 = random.choice(item_field[field2])
@@ -152,7 +160,9 @@ def randQA_filewrite_mix(amount: int, cursor: sqlite3.Cursor):
         temp_A = temp_A.format(field2=field2, jobid=jid)
         think1 = think1.format(field1=field1, field2=field2)
         think2 = think2.format(field1=field1, field2=field2, jobid=jid)
-        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+        row = dbt.execute_sql(cursor, temp_A)[0][0]
+        ans = ans.format(field1 = field1, field2 = field2, jobid = jid, ans = row)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2, "answer": ans})
 
     with open(str(output), "a", encoding="utf-8") as f:
         for s in samples:
@@ -173,7 +183,7 @@ def randQA_jobexecution_mix(amount: int, cursor: sqlite3.Cursor):
     ids = [it[0] for it in cursor.fetchall()]
     samples = []
     for _ in range(amount):
-        temp_Q, temp_A, think1, think2, tool1, tool2 = random.choice(tp.TEMPLATE_JOBEXECUTION_MIX)
+        temp_Q, temp_A, think1, think2, tool1, tool2, ans = random.choice(tp.TEMPLATE_JOBEXECUTION_MIX)
         item_field = random.choice(resource_field_execution)
         field2 = list(item_field.keys())[0]
         field1 = random.choice(item_field[field2])
@@ -182,7 +192,9 @@ def randQA_jobexecution_mix(amount: int, cursor: sqlite3.Cursor):
         temp_A = temp_A.format(field2=field2, jobid=jid)
         think1 = think1.format(field1=field1, field2=field2)
         think2 = think2.format(field1=field1, field2=field2, jobid=jid)
-        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2})
+        row = dbt.execute_sql(cursor, temp_A)[0][0]
+        ans = ans.format(field1 = field1, field2 = field2, jobid = jid, ans = row)
+        samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2, "answer": ans})
 
     with open(str(output), "a", encoding="utf-8") as f:
         for s in samples:
@@ -205,16 +217,16 @@ def main():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # randQA_joballocation_jobid(10, cursor)
-    # randQA_joballocation_resource_extraction(10, cursor)
-    # randQA_filetransfer_mix(10, cursor)
-    # randQA_fileread_mix(10, cursor)
-    # randQA_jobexecution_mix(10, cursor)
-    # checksql(cursor)
+    randQA_joballocation_jobid(2, cursor)
+    randQA_joballocation_resource_extraction(2, cursor)
+    randQA_filetransfer_mix(2, cursor)
+    randQA_fileread_mix(2, cursor)
+    randQA_jobexecution_mix(2, cursor)
+    checksql(cursor)
 
-    result = dbt.check_All(cursor)
-    for _ in result:
-        print(_)
+    # result = dbt.check_All(cursor)
+    # for _ in result:
+    #     print(_)
 
     cursor.close()
     conn.close()

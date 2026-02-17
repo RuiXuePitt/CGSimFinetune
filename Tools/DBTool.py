@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from pathlib import Path
 from typing import Any, Tuple, List, Dict, Optional
 
@@ -32,10 +33,21 @@ def check_JobAllocation(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
     """, (n,))
     rows = cursor.fetchall()
 
+    cleaned_rows = []
+    for row in rows:
+        row = list(row)
+        meta = row[6]
+        if isinstance(meta, str):
+            try:
+                row[6] = json.loads(meta)
+            except Exception:
+                pass
+        cleaned_rows.append(row)
+
     return {
         "Field": "JobAllocation",
         "Columns": _get_table_columns(cursor, "EVENTS"),
-        "Example": rows,
+        "Example": cleaned_rows,
     }
 
 def check_FileTransfer(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
@@ -47,11 +59,22 @@ def check_FileTransfer(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
         LIMIT ?;
     """, (n,))
     rows = cursor.fetchall()
-    
+
+    cleaned_rows = []
+    for row in rows:
+        row = list(row)
+        meta = row[6]
+        if isinstance(meta, str):
+            try:
+                row[6] = json.loads(meta)
+            except Exception:
+                pass
+        cleaned_rows.append(row)
+
     return {
         "Field": "FileTransfer",
         "Columns": _get_table_columns(cursor, "EVENTS"),
-        "Example": rows,
+        "Example": cleaned_rows,
     }
 
 def check_FileRead(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
@@ -64,10 +87,21 @@ def check_FileRead(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
     """, (n,))
     rows = cursor.fetchall()
 
+    cleaned_rows = []
+    for row in rows:
+        row = list(row)
+        meta = row[6]
+        if isinstance(meta, str):
+            try:
+                row[6] = json.loads(meta)
+            except Exception:
+                pass
+        cleaned_rows.append(row)
+
     return {
         "Field": "FileRead",
         "Columns": _get_table_columns(cursor, "EVENTS"),
-        "Example": rows,
+        "Example": cleaned_rows,
     }
 
 def check_FileWrite(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
@@ -80,10 +114,21 @@ def check_FileWrite(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
     """, (n,))
     rows = cursor.fetchall()
 
+    cleaned_rows = []
+    for row in rows:
+        row = list(row)
+        meta = row[6]
+        if isinstance(meta, str):
+            try:
+                row[6] = json.loads(meta)
+            except Exception:
+                pass
+        cleaned_rows.append(row)
+
     return {
         "Field": "FileWrite",
         "Columns": _get_table_columns(cursor, "EVENTS"),
-        "Example": rows,
+        "Example": cleaned_rows,
     }
 
 def check_JobExecution(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
@@ -96,10 +141,21 @@ def check_JobExecution(cursor: sqlite3.Cursor, n: int = 5) -> Dict[str, Any]:
     """, (n,))
     rows = cursor.fetchall()
 
+    cleaned_rows = []
+    for row in rows:
+        row = list(row)
+        meta = row[6]
+        if isinstance(meta, str):
+            try:
+                row[6] = json.loads(meta)
+            except Exception:
+                pass
+        cleaned_rows.append(row)
+
     return {
         "Field": "JobExecution",
         "Columns": _get_table_columns(cursor, "EVENTS"),
-        "Example": rows,
+        "Example": cleaned_rows,
     }
 
 def check_All(cursor: sqlite3.Cursor, n: int = 5) -> List[Dict[str, Any]]:

@@ -12,6 +12,7 @@ TEMPLATE_JOBALLOCATION_JOBID = [
         "According to 'unique', DISTINCT may be used.\n",
         "check_JobAllocation",
         "execute_sql",
+        "At site '{site}', the allocated job id is '{ans}'."
     ),
     (
         "At site {site}, what is the allocated job id?",
@@ -25,6 +26,7 @@ TEMPLATE_JOBALLOCATION_JOBID = [
         "According to 'unique', DISTINCT may be used.\n",
         "check_JobAllocation",
         "execute_sql",
+        "At site '{site}', the allocated job id is '{ans}'."
     ),
     (
         "List the allocated JOB_IDs for JobAllocation events at site {site}.",
@@ -38,6 +40,7 @@ TEMPLATE_JOBALLOCATION_JOBID = [
         "According to 'unique', DISTINCT may be used.\n",
         "check_JobAllocation",
         "execute_sql",
+        "At site '{site}', the allocated job id is '{ans}'."
     ),
     (
         "Which job IDs were allocated at {site} site?",
@@ -51,6 +54,7 @@ TEMPLATE_JOBALLOCATION_JOBID = [
         "According to 'unique', DISTINCT may be used.\n",
         "check_JobAllocation",
         "execute_sql",
+        "At site '{site}', the allocated job id is '{ans}'."
     )
 ]
 
@@ -71,7 +75,8 @@ TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION = [
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         
         "check_JobAllocation",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobAllocation record, and the value is '{ans}'."
     ),
     (
         "For job {jobid}, what is the recorded {field1}?",
@@ -87,7 +92,8 @@ TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION = [
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         
         "check_All",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobAllocation record, and the value is '{ans}'."
     ),
     (
         "For the allocation of job {jobid}, show the {field1} from the metadata.",
@@ -104,7 +110,8 @@ TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION = [
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
 
         "check_JobAllocation",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobAllocation record, and the value is '{ans}'."
     )
 ]
 
@@ -123,7 +130,8 @@ TEMPLATE_FILETRANSFER_MIX = [
         "According to '{jobid}', JOB_ID may be used for filtering.\n"
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         "check_FileTransfer",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileTransfer record, and the value is '{ans}'."
     ),
     (
         "What is the {field1} of job {jobid}?",
@@ -138,7 +146,8 @@ TEMPLATE_FILETRANSFER_MIX = [
         "According to '{jobid}', JOB_ID may be used for filtering.\n"
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         "check_All",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileTransfer record, and the value is '{ans}'."
     ),
     (
         "For job {jobid}, what is the {field1} during transfer?",
@@ -160,6 +169,7 @@ TEMPLATE_FILETRANSFER_MIX = [
 
         "check_All",
         "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileTransfer record, and the value is '{ans}'."
     )
 ]   
 
@@ -178,7 +188,8 @@ TEMPLATE_FILEREAD_MIX = [
         "According to '{jobid}', JOB_ID may be used for filtering.\n"
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         "check_FileRead",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileRead record, and the value is '{ans}'."
     ),
     (
         "What is the {field1} of job {jobid}?",
@@ -193,7 +204,8 @@ TEMPLATE_FILEREAD_MIX = [
         "According to '{jobid}', JOB_ID may be used for filtering.\n"
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         "check_All",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileRead record, and the value is '{ans}'."
     ),
     (
         "For job {jobid}, what is the {field1} during reading task?",
@@ -215,6 +227,7 @@ TEMPLATE_FILEREAD_MIX = [
 
         "check_All",
         "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileRead record, and the value is '{ans}'."
     )
 ]
 
@@ -233,7 +246,8 @@ TEMPLATE_FILEWRITE_MIX = [
         "According to '{jobid}', JOB_ID may be used for filtering.\n"
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         "check_FileWrite",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileWrite record, and the value is '{ans}'."
     ),
     (
         "What is the {field1} of job {jobid}?",
@@ -248,7 +262,8 @@ TEMPLATE_FILEWRITE_MIX = [
         "According to '{jobid}', JOB_ID may be used for filtering.\n"
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
         "check_All",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileWrite record, and the value is '{ans}'."
     ),
     (
         "For job {jobid}, what is the {field1} during writing task?",
@@ -270,6 +285,7 @@ TEMPLATE_FILEWRITE_MIX = [
 
         "check_All",
         "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileWrite record, and the value is '{ans}'."
     )
 ]
 
@@ -290,7 +306,8 @@ TEMPLATE_JOBEXECUTION_MIX = [
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
 
         "check_JobExecution",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobExecution record, and the value is '{ans}'."
     ),
     (
         "For job {jobid}, what is the recorded {field1}?",
@@ -308,7 +325,8 @@ TEMPLATE_JOBEXECUTION_MIX = [
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
 
         "check_All",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobExecution record, and the value is '{ans}'."
     ),
     (
         "During execution of job {jobid}, what is the {field1}?",
@@ -327,6 +345,7 @@ TEMPLATE_JOBEXECUTION_MIX = [
         "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
 
         "check_All",
-        "execute_sql"
+        "execute_sql",
+        "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobExecution record, and the value is '{ans}'."
     )
 ]
