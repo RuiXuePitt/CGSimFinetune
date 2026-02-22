@@ -66,7 +66,12 @@ def load_QLoRA_Model(repo_id: str):
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
     )
 
-    model = AutoModelForCausalLM.from_pretrained(repo_id, quantization_config=config)
+    model = AutoModelForCausalLM.from_pretrained(
+        repo_id, 
+        quantization_config=config,
+        device_map = "auto",
+        torch_dtype=torch.bfloat16,
+        trust_remote_code=True)
     model.config.use_cache = False # turn off caching for training
     model = prepare_model_for_kbit_training(model)
 
@@ -88,7 +93,7 @@ def set_train_config(model, processed_ds):
     All settings for training.
     '''
 
-    batch_size = 4
+    batch_size = 1
     eval_steps = 50
     total_epoch = 1
     save_steps = 100
@@ -111,7 +116,7 @@ def set_train_config(model, processed_ds):
         output_dir=output_dir,
         warmup_steps=1,
         per_device_train_batch_size=batch_size,
-        gradient_accumulation_steps=1,
+        gradient_accumulation_steps=8,
         gradient_checkpointing=True,
         num_train_epochs=total_epoch,
         learning_rate=2e-4,

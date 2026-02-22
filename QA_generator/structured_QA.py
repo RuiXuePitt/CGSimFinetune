@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import random
 import sys
+import os
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 import QA_Templates as tp
@@ -217,11 +218,11 @@ def main():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    randQA_joballocation_jobid(2, cursor)
-    randQA_joballocation_resource_extraction(2, cursor)
-    randQA_filetransfer_mix(2, cursor)
-    randQA_fileread_mix(2, cursor)
-    randQA_jobexecution_mix(2, cursor)
+    randQA_joballocation_jobid(200, cursor)
+    randQA_joballocation_resource_extraction(200, cursor)
+    randQA_filetransfer_mix(200, cursor)
+    randQA_fileread_mix(200, cursor)
+    randQA_jobexecution_mix(200, cursor)
     checksql(cursor)
 
     # result = dbt.check_All(cursor)

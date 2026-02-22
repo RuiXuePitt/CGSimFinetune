@@ -1,0 +1,25 @@
+name: hf
+channels:               # search sequence
+  - pytorch
+  - nvidia
+  - conda-forge
+channel_priority: strict
+dependencies:           # conda + pip install
+  - python=3.10
+  - pip
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::torchaudio
+  - pytorch::pytorch-cuda=12.1
+  - pip:                # pip install
+      - fsspec
+      - matplotlib
+      - transformers
+      - accelerate
+      - datasets
+      - huggingface_hub
+      - safetensors
+      - peft
+      - "bitsandbytes>=0.46.1"
+      - sentencepiece
+      - protobuf
