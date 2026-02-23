@@ -22,7 +22,8 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {},
-                "required": []
+                "required": [],
+                "additionalProperties": False
             }
         }
     },
@@ -34,7 +35,8 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {},
-                "required": []
+                "required": [],
+                "additionalProperties": False
             }
         }
     },
@@ -46,7 +48,8 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {},
-                "required": []
+                "required": [],
+                "additionalProperties": False
             }
         }
     },
@@ -58,7 +61,8 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {},
-                "required": []
+                "required": [],
+                "additionalProperties": False
             }
         }
     },
@@ -70,7 +74,8 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {},
-                "required": []
+                "required": [],
+                "additionalProperties": False
             }
         }
     },
@@ -82,7 +87,8 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {},
-                "required": []
+                "required": [],
+                "additionalProperties": False
             }
         }
     },
@@ -99,7 +105,8 @@ tools = [
                         "description": "The SQL query to execute (SQLite dialect) against the CGsim `EVENTS` database."
                     }
                 },
-                "required": ["sql"]
+                "required": ["sql"],
+                "additionalProperties": False
             }
         }
     }
@@ -110,7 +117,7 @@ system_prompt = "You are a CGsim agent. Answer questions related to grid simulat
 
 def load() -> List[Dict]:
     records = [] 
-    with open(str(resourcedir / "ques_sql.jsonl"), "r") as f:
+    with open(str(resourcedir / "test_sql.jsonl"), "r") as f:
         for line in f:
             records.append(json.loads(line.strip()))
     return records
@@ -137,7 +144,7 @@ def converter(records: List[Dict]) -> List:
     return training_dataset
 
 def write(training_dataset: List) -> None:
-    with open(str(resourcedir / "traindata.jsonl"), "w") as f:
+    with open(str(resourcedir / "testdata.jsonl"), "w") as f:
         for d in training_dataset:
             f.write(json.dumps(d, ensure_ascii=False) + "\n")
     return

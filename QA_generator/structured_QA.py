@@ -13,7 +13,7 @@ import DBTool as dbt
 
 db_path = current_dir.parent / "resources" / "CGsimSite.db"
 dbt.set_db_path(str(db_path))
-output = current_dir.parent / "resources" / "ques_sql.jsonl"
+output = current_dir.parent / "resources" / "test_sql.jsonl"
 
 def randQA_joballocation_jobid(amount: int, cursor: sqlite3.Cursor):
     cmd = """
@@ -217,11 +217,11 @@ def main():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    randQA_joballocation_jobid(2, cursor)
-    randQA_joballocation_resource_extraction(2, cursor)
-    randQA_filetransfer_mix(2, cursor)
-    randQA_fileread_mix(2, cursor)
-    randQA_jobexecution_mix(2, cursor)
+    randQA_joballocation_jobid(200, cursor)
+    randQA_joballocation_resource_extraction(200, cursor)
+    randQA_filetransfer_mix(200, cursor)
+    randQA_fileread_mix(200, cursor)
+    randQA_jobexecution_mix(200, cursor)
     checksql(cursor)
 
     # result = dbt.check_All(cursor)
