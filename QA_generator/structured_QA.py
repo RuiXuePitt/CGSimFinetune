@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import random
 import sys
+import os
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 import QA_Templates as tp
