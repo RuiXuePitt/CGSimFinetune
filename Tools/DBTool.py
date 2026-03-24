@@ -1,23 +1,6 @@
 import sqlite3
 import json
-from pathlib import Path
-from typing import Any, Tuple, List, Dict, Optional
-
-DB_PATH: Optional[str] = None
-
-def set_db_path(db_path: str):
-    global DB_PATH
-    DB_PATH = str(Path(db_path).resolve())
-
-# def connect() -> sqlite3.Cursor:
-#     global DB_PATH
-#     conn = sqlite3.connect(DB_PATH)
-#     return conn, conn.cursor()
-
-# def close(conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> None:
-#     conn.close()
-#     cursor.close()
-#     return None
+from typing import Any, Tuple, List, Dict
 
 def _get_table_columns(cursor: sqlite3.Cursor, table: str = "EVENTS") -> List[str]:
     cursor.execute(f"PRAGMA table_info({table});")
@@ -170,3 +153,38 @@ def check_All(cursor: sqlite3.Cursor, n: int = 5) -> List[Dict[str, Any]]:
 def execute_sql(cursor: sqlite3.Cursor, sql: str) -> List[Tuple[Any, ...]]:
     cursor.execute(sql)
     return cursor.fetchall()
+
+def random_JobID(cursor: sqlite3.Cursor) -> Dict[str, Any]:
+
+    jobid = cursor.execute("""
+    SELECT DISTINCT JOB_ID FROM EVENTS ORDER BY RANDOM() LIMIT 1;
+    """).fetchone()[0]
+    cursor.execute(f"""
+        SELECT EVENT, STATE, STATUS, JOB_ID, TIME, METADATA
+        FROM EVENTS
+        WHERE JOB_ID = {jobid}
+        ORDER BY EVENT;
+    """)
+    rows = cursor.fetchall()
+
+    cleaned_rows = []
+    for row in rows:
+        row = list(row)
+        meta = row[5]
+        if isinstance(meta, str):
+            try:
+                row[5] = json.loads(meta)
+            except Exception:
+                pass
+        row[0] = f"'EVENT': {row[0]}"
+        row[1] = f"'STATE': {row[1]}"
+        row[2] = f"'STATUS: {row[2]}"
+        row[3] = f"'JOB_ID': {row[3]}"
+        row[4] = f"'TIME': {row[4]}"
+        row[5] = f"'META': {row[5]}"
+        cleaned_rows.append(row)
+
+    return {
+        "JOB_ID": jobid,
+        "CONTENTS": cleaned_rows,
+    }

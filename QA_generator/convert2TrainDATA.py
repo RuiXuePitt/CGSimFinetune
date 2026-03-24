@@ -11,7 +11,6 @@ import DBTool as dbt
 
 resourcedir = currdir.parent / "resources"
 db_path = currdir.parent / "resources" / "CGsimSite.db"
-dbt.set_db_path(str(db_path))
 
 tools = [
     {
@@ -115,14 +114,14 @@ tools = [
 system_prompt = "You are a CGsim agent. Answer questions related to grid simulation related questions. Use tools when needed."
 
 
-def load() -> List[Dict]:
+def load(filename: str) -> List[Dict]:
     records = [] 
-    with open(str(resourcedir / "test_sql.jsonl"), "r") as f:
+    with open(str(resourcedir / filename), "r") as f:
         for line in f:
             records.append(json.loads(line.strip()))
     return records
 
-def converter(records: List[Dict]) -> List:
+def converter_struturedata(records: List[Dict]) -> List:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -143,13 +142,34 @@ def converter(records: List[Dict]) -> List:
     conn.close()
     return training_dataset
 
-def write(training_dataset: List) -> None:
-    with open(str(resourcedir / "testdata.jsonl"), "w") as f:
+def converter_llmdata(records: List[Dict]) -> List:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    training_dataset = []
+    for r in records:
+        messages = []
+        messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": r["user_question"]})
+        messages.append({"role": "assistant", "content": r["reason_check"], "tool_calls": [{"type": "function", "function": {"name": r["check_tool"], "arguments": {}}}]})
+        messages.append({"role": "tool", "content": json.dumps(getattr(dbt, r["check_tool"])(cursor), ensure_ascii=False)})
+        messages.append({"role": "assistant", "content": r["reason_sql"], "tool_calls": [{"type": "function", "function": {"name": "execute_sql", "arguments": {"sql": r["sql"]}}}]})
+        messages.append({"role": "tool", "content": json.dumps(getattr(dbt, "execute_sql")(cursor, r["sql"]), ensure_ascii=False)})
+        messages.append({"role": "assistant", "content": r["answer"]})
+
+        training_dataset.append({"tools": tools, "messages": messages})
+
+    cursor.close()
+    conn.close()
+    return training_dataset
+
+def write(training_dataset: List, outputfile: str) -> None:
+    with open(str(resourcedir / outputfile), "w") as f:
         for d in training_dataset:
             f.write(json.dumps(d, ensure_ascii=False) + "\n")
     return
 
 if __name__ == "__main__":
-    records = load()
-    training_dataset = converter(records)
-    write(training_dataset)
+    records = load("AI_QA_Gen.jsonl")
+    training_dataset = converter_llmdata(records)
+    write(training_dataset, "AI_QA_TrainData.jsonl")

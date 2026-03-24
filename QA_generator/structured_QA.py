@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import random
 import sys
-import os
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 import QA_Templates as tp
@@ -13,7 +12,6 @@ sys.path.append(str(tool_dir))
 import DBTool as dbt
 
 db_path = current_dir.parent / "resources" / "CGsimSite.db"
-dbt.set_db_path(str(db_path))
 output = current_dir.parent / "resources" / "test_sql.jsonl"
 
 def randQA_joballocation_jobid(amount: int, cursor: sqlite3.Cursor):
@@ -202,7 +200,7 @@ def randQA_jobexecution_mix(amount: int, cursor: sqlite3.Cursor):
             f.write(json.dumps(s) + "\n")
     return
 
-def checksql(cursor: sqlite3.Cursor):
+def check_allsql(cursor: sqlite3.Cursor, output: Path):
     records = []
     with open(str(output), 'r') as f:
         for line in f:
@@ -223,7 +221,7 @@ def main():
     randQA_filetransfer_mix(200, cursor)
     randQA_fileread_mix(200, cursor)
     randQA_jobexecution_mix(200, cursor)
-    checksql(cursor)
+    check_allsql(cursor, output)
 
     # result = dbt.check_All(cursor)
     # for _ in result:
