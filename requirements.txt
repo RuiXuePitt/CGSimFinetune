@@ -1,0 +1,11 @@
+matplotlib
+transformers
+accelerate
+datasets
+huggingface_hub
+safetensors
+peft
+bitsandbytes>=0.46.1
+sentencepiece
+protobuf
+fsspec

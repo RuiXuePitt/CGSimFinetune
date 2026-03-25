@@ -3,14 +3,21 @@ from pathlib import Path
 from typing import List, Dict
 import sqlite3
 import sys
+import os
 
 currdir = Path(__file__).parent
 tool_dir = currdir.parent / "Tools"
 sys.path.append(str(tool_dir))
 import DBTool as dbt
 
-resourcedir = currdir.parent / "resources"
-db_path = currdir.parent / "resources" / "CGsimSite.db"
+default_resourcedir = currdir.parent / "resources"
+scratch = os.environ.get("PSCRATCH")
+if scratch:
+    resourcedir = Path(scratch) / "CGSimFinetune" / "resources"
+else:
+    resourcedir = default_resourcedir
+
+db_path = resourcedir / "CGsimSite.db"
 
 tools = [
     {

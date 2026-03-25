@@ -7,7 +7,7 @@ from pathlib import Path
 from transformers import (
     AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
     TrainingArguments, Trainer, DataCollatorForSeq2Seq)
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import PeftModel
 import os
 import math
 
@@ -17,8 +17,11 @@ if scratch:
     currdir = Path(scratch) / "CGSimFinetune" / "FineTune"
 else:
     currdir = Path(__file__).parent
-trainpath = currdir.parent / "resources" / "traindata.jsonl"
-repo_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
+trainpath = currdir.parent / "resources" / "AI_QA_TrainData.jsonl"
+base_model_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
+checkpoint_path = currdir.parent / "run" / "nemotron-llama8b-CGsim" / "checkpoint-250"
+if not checkpoint_path.exists():
+    raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
 def load_data():
     '''
@@ -29,27 +32,24 @@ def load_data():
     with open(str(trainpath), "r") as f:
         for line in f:
             train_data.append(json.loads(line))
+    print(trainpath)
+    print(len(train_data))
+    print(train_data[0])
     return train_data
 
 
-def load_tokenizer(repo_id: str):
+def load_tokenizer(base_model_id: str):
     '''
     Load tokenizer.
     Padding tokens are set as eos_token.
     '''
-    tokenizer = AutoTokenizer.from_pretrained(repo_id)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_id)
     if tokenizer.pad_token is None:
         print("Setting pad token as ", tokenizer.eos_token)
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 
 
-# def process_data():
-#     train_data = load_data()
-#     tokenizer = load_tokenizer(repo_id)
-#     ds = Dataset.from_list(train_data)
-#     processed_ds = ds.map(lambda x: tt.tokenize_and_mask(x, tokenizer), remove_columns=ds.column_names)
-#     return processed_ds
 def process_data(tokenizer):
     train_data = load_data()
     ds = Dataset.from_list(train_data)
@@ -66,7 +66,7 @@ def process_data(tokenizer):
 
     len_ds = ds.map(get_len)
     max_len = max(len_ds["seq_len"])
-    max_length = math.ceil(max_len / 1024) * 1024
+    max_length = min(math.ceil(max_len / 1024) * 1024, 8192)
 
     print("raw max token length:", max_len)
     print("rounded max_length:", max_length)
@@ -77,7 +77,7 @@ def process_data(tokenizer):
     )
     return processed_ds
 
-def load_QLoRA_Model(repo_id: str):
+def load_QLoRA_Model(base_model_id: str):
     '''
     Load model for QLoRA finetuning.
     Only used for training, so the kv_cache is turned off.
@@ -89,35 +89,31 @@ def load_QLoRA_Model(repo_id: str):
         bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
-    lora = LoraConfig(
-        r=16,
-        lora_alpha=32,
-        lora_dropout=0.05,
-        bias="none",
-        task_type="CAUSAL_LM",
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
-    )
 
-    model = AutoModelForCausalLM.from_pretrained(
-        repo_id, 
+    base_model = AutoModelForCausalLM.from_pretrained(
+        base_model_id, 
         quantization_config=config,
         device_map = "auto",
         torch_dtype=torch.bfloat16,
         trust_remote_code=True)
-    model.config.use_cache = False # turn off caching for training
-    model = prepare_model_for_kbit_training(model)
+
+    ft_model = PeftModel.from_pretrained(base_model, checkpoint_path, is_trainable=True)
 
     # summary of GPU resource after loading
     print("allocated GiB:", torch.cuda.memory_allocated()/1024**3)
     print("reserved  GiB:", torch.cuda.memory_reserved()/1024**3)
-    print("is_loaded_in_4bit:", getattr(model, "is_loaded_in_4bit", None))
-    print("is_loaded_in_8bit:", getattr(model, "is_loaded_in_8bit", None))
+    print("is_loaded_in_4bit:", getattr(ft_model, "is_loaded_in_4bit", None))
+    print("is_loaded_in_8bit:", getattr(ft_model, "is_loaded_in_8bit", None))
 
-    model = get_peft_model(model, lora)
+    ft_model.train()
+    # important for further train, never forget
+    ft_model.enable_input_require_grads()
+    ft_model.config.use_cache = False
+
     # summary of trainable parameters
-    model.print_trainable_parameters()
+    ft_model.print_trainable_parameters()
 
-    return model
+    return ft_model
 
 
 def set_train_config(model, processed_ds, tokenizer):
@@ -131,7 +127,7 @@ def set_train_config(model, processed_ds, tokenizer):
     save_steps = 10 # save step x grad accu step x batch size = total micro step for save
     max_steps = 250 # total step x grad accu step x batch size = total micro step for total train
 
-    run_name = "nemotron-llama8b-CGsim"
+    run_name = "nemotron-llama8b-CGsim-HighQual"
     output_dir = str(currdir.parent / "run" / run_name)
     logging_dir = str(currdir.parent / "run" / "logs")
 
@@ -152,7 +148,7 @@ def set_train_config(model, processed_ds, tokenizer):
         gradient_checkpointing=True,
         num_train_epochs=total_epoch,
         max_steps = max_steps,
-        learning_rate=2e-4,
+        learning_rate=1e-4,
         bf16=True,
         optim="paged_adamw_8bit",
         logging_dir=logging_dir,        # Directory for storing logs
@@ -182,12 +178,12 @@ def set_train_config(model, processed_ds, tokenizer):
 
 def train():
     '''
-    Train a finetuned model.
+    Futher Train a finetuned model.
     '''
-    tokenizer = load_tokenizer(repo_id)
+    tokenizer = load_tokenizer(base_model_id)
     processed_ds = process_data(tokenizer)
-    model = load_QLoRA_Model(repo_id)
-    trainer = set_train_config(model, processed_ds, tokenizer)
+    ft_model = load_QLoRA_Model(base_model_id)
+    trainer = set_train_config(ft_model, processed_ds, tokenizer)
     out = trainer.train()
     history = trainer.state.log_history
     trainer.save_model()
@@ -196,10 +192,10 @@ def train():
 def main():
     _, history = train()
 
-    run_name = "nemotron-llama8b-CGsim"
+    run_name = "nemotron-llama8b-CGsim-HighQual"
     output_dir = Path(home) / "run" / run_name
     output_dir.mkdir(parents=True, exist_ok=True)
-    fig_loc = str(output_dir / "lossplot.png")
+    fig_loc = str(output_dir / "lossplot_HighQual.png")
 
     train_steps, train_loss = [], []
     eval_steps, eval_loss = [], []
