@@ -91,15 +91,19 @@ def load_QModel(base_model_id: str):
         trust_remote_code=True)
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_id)
-    ft_model = PeftModel.from_pretrained(base_model, checkpoint_path, is_trainable=True)
+    ft_model = PeftModel.from_pretrained(base_model, checkpoint_path, is_trainable=False)
+    ft_model.eval()
+    ft_model.config.use_cache = True
+
+    print("Model Default Temperature : ", ft_model.generation_config.temperature)
+    print("Model Default Top P : ",ft_model.generation_config.top_p)
+    print("Model Default Top K : ", ft_model.generation_config.top_k)
 
     # summary of GPU resource after loading
     print("allocated GiB:", torch.cuda.memory_allocated()/1024**3)
     print("reserved  GiB:", torch.cuda.memory_reserved()/1024**3)
     print("is_loaded_in_4bit:", getattr(ft_model, "is_loaded_in_4bit", None))
     print("is_loaded_in_8bit:", getattr(ft_model, "is_loaded_in_8bit", None))
-
-    ft_model.config.use_cache = True
 
     return ft_model, tokenizer
 
@@ -119,6 +123,7 @@ def ask_cgsim(model, tokenizer, cursor, question, max_rounds=6):
         think, toolcall_block = extract_toolcall_block(gen_text)
         if toolcall_block is None:
             print("Answer \n", gen_text.split("<eot_id>")[0])
+            print("Finished \n")
             return {'answer': gen_text.split("<eot_id>")[0], 'messages': messages}
 
         tool_name = toolcall_block["name"]
@@ -128,7 +133,6 @@ def ask_cgsim(model, tokenizer, cursor, question, max_rounds=6):
             tool_result = getattr(dbt, tool_name)(cursor)
         elif tool_name == ("execute_sql"):
             tool_args = toolcall_block["arguments"]["sql"]
-            print(tool_args)
             tool_result = dbt.execute_sql(cursor, tool_args)
         else:
             raise Exception(f"Unknown tool name: {tool_name}")
@@ -144,8 +148,9 @@ def main():
     conn = sqlite3.connect(dbpath)
     cursor = conn.cursor()
     
-    ans1 = ask_cgsim(ft_model, tokenizer, cursor, "During execution of job 2794720992, what is the total queue time?")
-    ans2 = ask_cgsim(ft_model, tokenizer, cursor, "What is the possible reason that execution of job 8774052003 takes so long time, could you please explain?")
+    ans1 = ask_cgsim(ft_model, tokenizer, cursor, "For job 9590968381, what was the average transfer rate for all the successful data movements that originated from AGLT2_site_4?")
+    ans2 = ask_cgsim(ft_model, tokenizer, cursor, "Could you rank the different sites by the total volume of data they successfully read from their local storage?")
+    ans3 = ask_cgsim(ft_model, tokenizer, cursor, "What is the possible reason that execution of job 8774052003 takes so long time, could you please explain?")
     
     cursor.close()
     conn.close()

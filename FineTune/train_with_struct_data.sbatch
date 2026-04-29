@@ -23,18 +23,16 @@ echo "==========================================================================
 
 cd $HOME/CGSimFinetune
 
-mkdir -p $PSCRATCH/.hf
+mkdir -p logs $PSCRATCH/.hf
 
 # unset dead paths (?)
-unset SSL_CERT_FILE
-unset REQUESTS_CA_BUNDLE
-unset CURL_CA_BUNDLE
+unset SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE
 
 export HF_HOME=$PSCRATCH/.hf
 export HF_HUB_CACHE=$PSCRATCH/.hf/hub
-export TRANSFORMERS_CACHE=$PSCRATCH/.hf/transformers
-export HF_DATASETS_CACHE=$PSCRATCH/.hf/datasets
-export PATH=$HOME/.local/bin:$PATH
+# export TRANSFORMERS_CACHE=$PSCRATCH/.hf/transformers
+# export HF_DATASETS_CACHE=$PSCRATCH/.hf/datasets
+# export PATH=$HOME/.local/bin:$PATH
 
 # GPU information
 echo "GPU Information:"
@@ -65,7 +63,7 @@ srun shifter \
     --env HF_DATASETS_CACHE=$HF_DATASETS_CACHE \
     --env CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES \
     --volume "$PSCRATCH:/scratch" \
-    --volume "$PWD:/workspace" \
+    --volume "$HOME/CGSimFinetune:/workspace" \
     bash -lc "
         set -euo pipefail
         cd /workspace

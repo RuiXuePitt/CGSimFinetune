@@ -1,13 +1,15 @@
+"""
+FineTuning with high quality data distilled from larger model.
+
+Rui XUE
+"""
+
 import traintools as tt
 import json
 import matplotlib.pyplot as plt
 import torch
 from datasets import Dataset
 from pathlib import Path
-from transformers import (
-    AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
-    TrainingArguments, Trainer, DataCollatorForSeq2Seq)
-from peft import PeftModel
 import os
 import math
 
@@ -17,11 +19,24 @@ if scratch:
     currdir = Path(scratch) / "CGSimFinetune" / "FineTune"
 else:
     currdir = Path(__file__).parent
-trainpath = currdir.parent / "resources" / "AI_QA_TrainData.jsonl"
+TRAINDATA_PATH = Path(scratch) / "resources" / "AI_QA_v1" / "train_AI_QA_dataset_v1.jsonl"
 base_model_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
-checkpoint_path = currdir.parent / "run" / "nemotron-llama8b-CGsim" / "checkpoint-250"
-if not checkpoint_path.exists():
-    raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+version = "nemotron-llama8b-CGsim_highqual_v1"
+
+STEP1_ADAPTER = str(Path(scratch) / "run" / "nemotron-llama8b-CGsim_structured_v1" / "checkpoint-57")
+CHECKPOINT_DIR = str(Path(scratch) / "run" / version / "checkpoints")
+LOGGING_DIR = str(Path(scratch) / "run" / version / "logs")
+lossplot_dir = str(Path(home) / "run" / version)
+fig_path = str(Path(lossplot_dir) / "lossplot_HighQual.png")
+
+os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+os.makedirs(LOGGING_DIR, exist_ok=True)
+os.makedirs(lossplot_dir, exist_ok=True)
+
+from transformers import (
+    AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
+    TrainingArguments, Trainer, DataCollatorForSeq2Seq)
+from peft import PeftModel
 
 def load_data():
     '''
@@ -29,10 +44,10 @@ def load_data():
     The datasets should never be used for testing.
     '''
     train_data = []
-    with open(str(trainpath), "r") as f:
+    with open(str(TRAINDATA_PATH), "r") as f:
         for line in f:
             train_data.append(json.loads(line))
-    print(trainpath)
+    print(TRAINDATA_PATH)
     print(len(train_data))
     print(train_data[0])
     return train_data
@@ -97,7 +112,7 @@ def load_QLoRA_Model(base_model_id: str):
         torch_dtype=torch.bfloat16,
         trust_remote_code=True)
 
-    ft_model = PeftModel.from_pretrained(base_model, checkpoint_path, is_trainable=True)
+    ft_model = PeftModel.from_pretrained(base_model, STEP1_ADAPTER, is_trainable=True)
 
     # summary of GPU resource after loading
     print("allocated GiB:", torch.cuda.memory_allocated()/1024**3)
@@ -121,15 +136,17 @@ def set_train_config(model, processed_ds, tokenizer):
     All settings for training.
     '''
 
+    # equivalent batch size = real batch size x grad accu steps
     batch_size = 1
-    eval_steps = 10 # eval step x grad accu step x batch size = total micro step for eval
-    total_epoch = 2
-    save_steps = 10 # save step x grad accu step x batch size = total micro step for save
-    max_steps = 250 # total step x grad accu step x batch size = total micro step for total train
+    grad_accu_steps = 8
 
-    run_name = "nemotron-llama8b-CGsim-HighQual"
-    output_dir = str(currdir.parent / "run" / run_name)
-    logging_dir = str(currdir.parent / "run" / "logs")
+    log_steps = 10 # log record steps
+    eval_steps = 10 # evaluate every 10 optimizer updates = 10 * grad_accum * batch samples
+    total_epoch = 1 # overwritten when max_steps > 0
+    save_steps = 10 # save checkpoint every 10 optimizer updates
+    max_steps = 250 # total optimizer updates
+
+    learning_rate = 5e-5
 
     # setup collator to align data lengths
     collator = DataCollatorForSeq2Seq(
@@ -141,24 +158,24 @@ def set_train_config(model, processed_ds, tokenizer):
 
     # setup training arguments for finetuning
     args = TrainingArguments(
-        output_dir=output_dir,
+        output_dir=CHECKPOINT_DIR,
         warmup_steps=1,
         per_device_train_batch_size=batch_size,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=grad_accu_steps,
         gradient_checkpointing=True,
         num_train_epochs=total_epoch,
         max_steps = max_steps,
-        learning_rate=1e-4,
+        learning_rate=learning_rate,
         bf16=True,
         optim="paged_adamw_8bit",
-        logging_dir=logging_dir,        # Directory for storing logs
+        logging_dir=LOGGING_DIR,        # Directory for storing logs
         save_strategy="steps",       # Save the model checkpoint every logging step
         save_steps=save_steps,                # Save checkpoints every 100 steps
-        logging_steps=10,
+        logging_steps=log_steps,
         per_device_eval_batch_size=batch_size,
         eval_strategy="steps",
         eval_steps=eval_steps,               # Evaluate and save checkpoints every 50 steps
-        do_eval=True,                # Perform evaluation at the end of
+        do_eval=True,                # Perform evaluation at the end
         report_to="none"
     )
 
@@ -192,11 +209,6 @@ def train():
 def main():
     _, history = train()
 
-    run_name = "nemotron-llama8b-CGsim-HighQual"
-    output_dir = Path(home) / "run" / run_name
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fig_loc = str(output_dir / "lossplot_HighQual.png")
-
     train_steps, train_loss = [], []
     eval_steps, eval_loss = [], []
     for h in history:
@@ -213,7 +225,7 @@ def main():
     plt.xlabel("step")
     plt.ylabel("loss")
     plt.legend()
-    plt.savefig(fig_loc)
+    plt.savefig(fig_path)
     plt.close()
 
     return
