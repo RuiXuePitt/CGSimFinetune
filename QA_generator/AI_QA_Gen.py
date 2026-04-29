@@ -14,8 +14,17 @@ import DBTool as dbt
 import prompts as ppts
 from structured_QA import check_allsql
 
-output_Q = currdir.parent / "resources" / "AI_Q_Gen.jsonl"
-output_QA = currdir.parent / "resources" / "AI_QA_Gen.jsonl"
+output_Q = currdir.parent / "resources" / "train_AI_Q_Gen_v1.jsonl"
+# output_QA = currdir.parent / "resources" / "test_AI_QA_Gen_v0.jsonl"
+output_QA_ready = currdir.parent / "resources" / "train_AI_QA_Gen_v1_ready.jsonl"
+output_QA_sqlerror = currdir.parent / "resources" / "train_AI_QA_Gen_v1_SQLerror.jsonl"
+output_QA_null = currdir.parent / "resources" / "train_AI_QA_Gen_v1_NULLanswer.jsonl"
+output_QA_incomplete = currdir.parent / "resources" / "train_AI_QA_Gen_v1_INCOMPLETEanswer.jsonl"
+
+def write_jsonl(path: Path, obj: dict):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
@@ -40,7 +49,8 @@ def llm_general_questions(datasamples, vague = False):
         prompt = ppts.prompt_ambiguous_general_questions
     else:
         prompt = ppts.prompt_general_questions
-    prompt = prompt.format(datasamples = datasamples, general_structure = ppts.general_structure)
+    prompt = prompt.format(datasamples = datasamples, general_structure = ppts.general_structure,
+                           reason_check = ppts.reason_check)
     response = gemini_model.generate_content(prompt)
     try:
         response_text = json.loads(response.text)
@@ -62,7 +72,8 @@ def llm_jobid_questions(datasamples, vague = False):
         prompt = ppts.prompt_ambiguous_jobid_questions
     else:
         prompt = ppts.prompt_jobid_questions
-    prompt = prompt.format(jobid = datasamples["JOB_ID"], datasamples = datasamples["CONTENTS"], general_structure = ppts.general_structure)
+    prompt = prompt.format(jobid = datasamples["JOB_ID"], datasamples = datasamples["CONTENTS"], general_structure = ppts.general_structure,
+                           reason_check = ppts.reason_check)
     response = gemini_model.generate_content(prompt)
     try:
         response_text = json.loads(response.text)
@@ -80,7 +91,9 @@ def llm_jobid_questions(datasamples, vague = False):
         return None
 
 def llm_sql(question, reason_check, check_tool, check_result):
-    prompt = ppts.prompt_jobid_sql.format(user_question = question, reason_check = reason_check, check_tool = check_tool, check_result = check_result)
+    prompt = ppts.prompt_jobid_sql.format(user_question = question, reason_check = reason_check, check_tool = check_tool, check_result = check_result,
+                                          reason_sql = ppts.reason_sql)
+    print("SQL Prompt Length: ", len(prompt))
     response = gemini_model.generate_content(prompt, generation_config=cfg)
     try:
         response_text = json.loads(response.text)
@@ -102,13 +115,54 @@ def llm_sql(question, reason_check, check_tool, check_result):
         return None
 
 
+# def llm_generate_answers(datasamples, cursor):
+#     prompt = ppts.prompt_final_answer
+#     sql_result = dbt.execute_sql(cursor, datasamples["sql"])
+#     prompt = prompt.format(user_question = datasamples["user_question"], sql = datasamples["sql"], sql_result = sql_result)
+#     response_text = gemini_model.generate_content(prompt, generation_config=cfg).text
+#     return response_text
 def llm_generate_answers(datasamples, cursor):
     prompt = ppts.prompt_final_answer
-    sql_result = dbt.execute_sql(cursor, datasamples["sql"])
-    prompt = prompt.format(user_question = datasamples["user_question"], sql = datasamples["sql"], sql_result = sql_result)
-    response_text = gemini_model.generate_content(prompt, generation_config=cfg).text
-    return response_text
 
+    try:
+        sql_result = dbt.execute_sql(cursor, datasamples["sql"])
+    except Exception as e:
+        err_obj = {
+            **datasamples,
+            "sql_error": str(e),
+        }
+        write_jsonl(output_QA_sqlerror, err_obj)
+
+        print("SQL EXECUTION ERROR. Skip this answer.")
+        print("User Question:", datasamples.get("user_question"))
+        print("SQL:", datasamples.get("sql"))
+        print("SQL Error:", str(e))
+        return "__SQL_ERROR__"
+
+    prompt = prompt.format(
+        user_question=datasamples["user_question"],
+        sql=datasamples["sql"],
+        sql_result=sql_result,
+    )
+
+    try:
+        response_text = gemini_model.generate_content(
+            prompt,
+            generation_config=cfg,
+        ).text
+    except Exception as e:
+        err_obj = {
+            **datasamples,
+            "answer_error": str(e),
+        }
+        write_jsonl(output_QA_sqlerror, err_obj)
+
+        print("ANSWER GENERATION ERROR. Skip this answer.")
+        print("User Question:", datasamples.get("user_question"))
+        print("Answer Error:", str(e))
+        return "__SQL_ERROR__"
+
+    return response_text
 
 def random_pick(cursor: sqlite3.Cursor):
     event = ["allocation", "execution", "read", "write", "transfer", "all"]
@@ -218,32 +272,92 @@ def jobid_ques_gen(rounds: int = 50, vague: float = 0.1):
     cursor.close()
     conn.close()
 
-def sql_ans_gen():
+# def sql_ans_gen():
+#     conn = sqlite3.connect(dbpath)
+#     cursor = conn.cursor()
+
+#     f1 = open(output_Q, 'r', encoding="utf-8")
+#     f2 = open(output_QA, "a", encoding="utf-8")
+
+#     for i, line in enumerate(f1):
+#         print(f"Generating Answer #{i}")
+#         datasamples = json.loads(line.strip())
+
+#         ans = llm_generate_answers(datasamples, cursor)
+#         if ans.startswith("__ANSWER__"):
+#             datasamples["answer"] = ans.split("__ANSWER__")[1].strip()
+#         elif ans.startswith("__NULL_RESULT__"):
+#             print("Problematic SQL Execution")
+#             datasamples["answer"] = "__NULL_RESULT__"
+#         else:
+#             print("Problematic AI API Calling")
+#             datasamples["answer"] = "__NULL_RESULT__"
+#         f2.write(json.dumps(datasamples) + "\n")
+
+#     cursor.close()
+#     conn.close()
+
+def sql_ans_gen(start_row: int = 1):
     conn = sqlite3.connect(dbpath)
     cursor = conn.cursor()
 
-    f1 = open(output_Q, 'r', encoding="utf-8")
-    f2 = open(output_QA, "a", encoding="utf-8")
+    f1 = open(output_Q, "r", encoding="utf-8")
 
     for i, line in enumerate(f1):
+        if (i < start_row-1):
+            continue
         print(f"Generating Answer #{i}")
+
         datasamples = json.loads(line.strip())
-
         ans = llm_generate_answers(datasamples, cursor)
-        if ans.startswith("__ANSWER__"):
-            datasamples["answer"] = ans.split("__ANSWER__")[1].strip()
-        elif ans.startswith("__NULL_RESULT__"):
-            print("Problematic SQL Execution")
-            datasamples["answer"] = "__NULL_RESULT__"
-        else:
-            print("Problematic AI API Calling")
-            datasamples["answer"] = "__NULL_RESULT__"
-        f2.write(json.dumps(datasamples) + "\n")
 
+        if ans == "__SQL_ERROR__":
+            print("Already written to SQLerror file.\n")
+            continue
+
+        if ans.startswith("__ANSWER__"):
+            datasamples["answer"] = ans.split("__ANSWER__", 1)[1].strip()
+            write_jsonl(output_QA_ready, datasamples)
+
+            print("READY DATA WRITTEN.")
+            print("User Question:", datasamples.get("user_question"))
+            print("Answer:", datasamples["answer"])
+            print("")
+            continue
+
+        if ans.startswith("__NULL_RESULT__"):
+            datasamples["answer"] = "__NULL_RESULT__"
+            write_jsonl(output_QA_null, datasamples)
+
+            print("NULL RESULT. Written to NULLanswer file.")
+            print("User Question:", datasamples.get("user_question"))
+            print("")
+            continue
+
+        if ans.startswith("__INCOMPLETE_RESULT__"):
+            datasamples["answer"] = ans.strip()
+            write_jsonl(output_QA_incomplete, datasamples)
+
+            print("INCOMPLETE RESULT. Written to INCOMPLETEanswer file.")
+            print("User Question:", datasamples.get("user_question"))
+            print("Answer:", datasamples["answer"])
+            print("")
+            continue
+
+        datasamples["answer"] = "__INCOMPLETE_RESULT__ Answer format is not recognized."
+        datasamples["raw_answer_output"] = ans
+        write_jsonl(output_QA_incomplete, datasamples)
+
+        print("UNRECOGNIZED ANSWER FORMAT. Written to INCOMPLETEanswer file.")
+        print("User Question:", datasamples.get("user_question"))
+        print("Raw Answer:", ans)
+        print("")
+
+    f1.close()
     cursor.close()
     conn.close()
 
 if __name__ == "__main__":
-    jobid_ques_gen(50, 0.2)
-    site_ques_gen(50, 0.2)
-    sql_ans_gen()
+    jobid_ques_gen(400, 0.1)
+    site_ques_gen(100, 0.1)
+    sql_ans_gen(499)

@@ -8,7 +8,54 @@ general_structure = """
         7) FileRead METADATA Key ONLY CONTAINS ["disk", "disk_read_bw", "duration", "file", "host", "site", "size"]
         8) FileWrite METADATA Key ONLY CONTAINS ["disk", "disk_write_bw", "duration", "file", "grid_storage_util", "host", "site", "site_storage_util", "size"]
         9) FileTransfer METADATA Key ONLY CONTAINS ["bandwidth", "destination_site", "duration", "file", "grid_storage_util", "latency", "link_load", "site_storage_util", "size", "source_site"]
-        10) If Question appears "successful", that means something is FINISHED!!!
+        10) Success-filter rule for SQL generation:
+            - FileRead/FileWrite/FileTransfer successful operations: STATE = 'Finished'
+            - JobExecution successful execution: STATUS = 'finished'
+            - JobAllocation success/assignment depends on wording; use STATUS = 'assigned' only when the question is about allocation assignment.
+    """
+
+reason_check = """
+        reason_check:
+        - Reasoning MUST NOT include prior knowledge of the database.
+        - The only goal is to choose the most relevant check_* tool.
+        - Write exactly ONE concise sentence.
+        - Do not mention metadata keys, columns, SQL, aggregation, or database schema.
+
+        Reasoning examples for clear questions:
+        1) "According to 'execution' in the question, check_JobExecution should be used."
+        2) "According to 'file transfers' in the question, check_FileTransfer should be used."
+        3) "According to 'read operations' in the question, check_FileRead should be used."
+        4) "According to 'write operations' in the question, check_FileWrite should be used."
+        5) "According to 'resource assignment' in the question, check_JobAllocation should be used."
+
+        Reasoning examples for ambiguous questions:
+        1) "The question is ambiguous, so check_All should be used to fetch more information."
+        2) "The event type is not clear, so check_All should be used to fetch more information."
+        3) "The question does not specify a clear activity type, so check_All should be used."
+
+        Tool-routing hints:
+        - allocation / assignment / placement / resource assignment -> check_JobAllocation
+        - execution / processing / compute / running / queue / speed / flops -> check_JobExecution
+        - transfer / migration / movement / sent / delivered / source / destination -> check_FileTransfer
+        - read / retrieve / input / opened file / disk read -> check_FileRead
+        - write / save / output / stored file / disk write -> check_FileWrite
+        - ambiguous / unclear activity type / multiple possible stages -> check_All
+    """
+
+reason_sql = """
+        reason_sql:
+        - At most 2 short sentences.
+        - Write a compact SQL plan, not a detailed explanation.
+        - Mention only needed operations: filters, json_extract, aggregation, grouping, sorting, DISTINCT, LIMIT.
+        - Do not mention operation details. Only mention the operation name.
+        - Do not mention any operation that is not used by the SQL.
+
+        Examples:
+        1) "Need filters and json_extract. Need aggregation."
+        2) "Need filters, json_extract, grouping, and aggregation."
+        3) "Need filters, json_extract, sorting, and LIMIT."
+        4) "Need json_extract and DISTINCT."
+        5) "Need grouping and aggregation."  
     """
 
 prompt_jobid_questions = """
@@ -51,20 +98,12 @@ prompt_jobid_questions = """
       And you should come up with other human style language.
     - Still, any concrete entity/value you mention must come from DATASAMPLES.
     
-    reason_check:
-    - Must start with "Let's think step by step."
-    - check_* tools are just used for sampling the data related to the EVENT type ["JobAllocation", "FileTransfer", "FileRead", "FileWrite", "JobExecution"],
-    - So be CONCISE, and just explain why the question is likely related to the specific EVENT type.
-        KEY words: mentioned "allocation", "transfer", "read", "write", "execution", or other synonyms indicate the EVENT types.
-        KEY words DO NOT include field names in the question, since the real model has no knowledge of data.
-        Reasoning format should be "According to [KEY word likely related to EVENT type], [EVENT type] should be checked"
-    - If there is no key word related to ["JobAllocation", "FileTransfer", "FileRead", "FileWrite", "JobExecution"],
-        Reaoning should be concise, explain you cannot make sure, so "check_All" is needed.
+    {reason_check}     
 
     Return JSON exactly:
     {{
         "user_question": ...,
-        "reason_check": ... (starts with "Let's think step by step."),
+        "reason_check": ...,
         "check_tool": "check_JobAllocation" | "check_FileTransfer" | "check_FileRead" | "check_FileWrite" | "check_JobExecution" | "check_All"
     }}
 """
@@ -108,17 +147,12 @@ prompt_ambiguous_jobid_questions = """
       And you should come up with other human style language.
     - Still, any concrete entity/value you mention must come from DATASAMPLES.
     
-    reason_check:
-    - Must start with "Let's think step by step."
-    - check_All tool is used for sampling the data when question does not specify the exact EVENT type.
-    - So be CONCISE, and just say the question is ambiguous so check_All is necessary to specify the field.
-        Reaoning should be concise, explain you cannot make sure (like, the EVENT type is not specified), so "check_All" is needed.
-        Do not mention any other information related to DATASAMPLES.
+    {reason_check}
 
     Return JSON exactly:
     {{
         "user_question": ...,
-        "reason_check": ... (starts with "Let's think step by step."),
+        "reason_check": ...,
         "check_tool": "check_All"
     }}
 """
@@ -165,16 +199,18 @@ prompt_jobid_sql = """
         - Use '=' ONLY when the user asks for an exact numeric match on a numeric metadata value
         (e.g., "exactly 8 cores", "size equals 1048576", "duration is exactly 30 seconds").
     - If user_question did NOT mention site (or source/destination site), SQL should NOT filter by it.    
-    - For JOB_ID / EVENT / STATE / STATUS:
-        * Use LIKE ONLY without wildcards (no '%' and no '_'), i.e. LIKE 'ExactValue'.
-        * Never use pattern matching for these fields.
+    - For direct columns JOB_ID / EVENT / STATE / STATUS, use exact equality with =, not LIKE.
+        Examples: JOB_ID = '2794720992', EVENT = 'JobExecution', STATE = 'Finished', STATUS = 'finished'.
     
-    reason_sql:
-    - Must start with "Let's think step by step."
-    - You may say "According to check_*, ..." to justify which STRUCTURE keys you chose,
-        but do not treat check_result as a restriction on values.  
-    - Explain SQL operations CONCISELY (filtering, grouping, aggregation, sorting, etc.).
-  
+    {reason_sql}
+
+    SQL quality rules:
+    - Return every quantity asked by the question. If it asks "which X and what Y", SELECT both X and Y.
+    - If ORDER BY ranks by a metric that the question asks about, SELECT that metric too.
+    - successful/completed/finished -> STATE = 'Finished' for FileRead/FileWrite/FileTransfer; STATUS = 'finished' for JobExecution.
+    - "from / sent from / originating from / started from" -> source_site, not STATE = 'Started'.
+    - JOB_ID/EVENT/STATE/STATUS use =; metadata strings use json_extract(...) LIKE.    
+
     Return JSON exactly:
     {{
         "reason_sql": ...,
@@ -217,20 +253,12 @@ prompt_general_questions = """
       And you should come up with other human style language.
     - Still, any concrete entity/value you mention must come from DATASAMPLES.
     
-    reason_check:
-    - Must start with "Let's think step by step."
-    - check_* tools are just used for sampling the data related to the EVENT type ["JobAllocation", "FileTransfer", "FileRead", "FileWrite", "JobExecution"],
-    - So be CONCISE, and just explain why the question is likely related to the specific EVENT type.
-        KEY words: mentioned "allocation", "transfer", "read", "write", "execution", or other synonyms indicate the EVENT types.
-        KEY words DO NOT include field names in the question, since the real model has no knowledge of data.
-        Reasoning format should be "According to [KEY word likely related to EVENT type], [EVENT type] should be checked"
-    - If there is no key word related to ["JobAllocation", "FileTransfer", "FileRead", "FileWrite", "JobExecution"],
-        Reaoning should be concise, explain you cannot make sure, so "check_All" is needed.
+    {reason_check}
 
     Return JSON exactly:
     {{
         "user_question": ...,
-        "reason_check": ... (starts with "Let's think step by step."),
+        "reason_check": ...,
         "check_tool": "check_JobAllocation" | "check_FileTransfer" | "check_FileRead" | "check_FileWrite" | "check_JobExecution" | "check_All"
     }}
 """
@@ -269,17 +297,12 @@ prompt_ambiguous_general_questions = """
       And you should come up with other human style language.
     - Still, any concrete entity/value you mention must come from DATASAMPLES.
     
-    reason_check:
-    - Must start with "Let's think step by step."
-    - check_All tool is used for sampling the data when question does not specify the exact EVENT type.
-    - So be CONCISE, and just say the question is ambiguous so check_All is necessary to specify the field.
-        Reaoning should be concise, explain you cannot make sure (like, the EVENT type is not specified), so "check_All" is needed.
-        Do not mention any other information related to DATASAMPLES.
+    {reason_check}
 
     Return JSON exactly:
     {{
         "user_question": ...,
-        "reason_check": ... (starts with "Let's think step by step."),
+        "reason_check": ...,
         "check_tool": "check_All"
     }}
 """
@@ -291,13 +314,14 @@ prompt_final_answer = """
         Given a user question and the SQL execution result, produce a final answer in a STRICT machine-parsable format.
 
         STRICT OUTPUT FORMAT:
-        - If there is NO usable answer, output exactly:
+        - If sql_result is empty or all values are NULL/None/null, output exactly:
         __NULL_RESULT__
-        (no other characters, no punctuation, no extra text, no whitespace lines)
 
-        - Otherwise output exactly one line starting with:
-        __ANSWER__ 
-        followed by the answer text.
+        - If sql_result cannot answer all requested information, output exactly:
+        __INCOMPLETE_RESULT__ <briefly state what is missing>
+        
+        - Otherwise output exactly:
+        __ANSWER__ <concise answer>
 
         When to output __NULL_RESULT__ (ANY triggers it):
         - sql_result has zero rows (empty result)
@@ -306,6 +330,12 @@ prompt_final_answer = """
 
         Human Readable Answer text formatting rules (when output is __ANSWER__):
         - Write a concise summary with polite explanations to the question.
+        - Be brief: one sentence preferred, two sentences maximum.
+        - Answer only from sql_result.
+        - Include all requested entities and values.
+        - Do not mention SQL, database, query, rows, tuples, or json_extract.
+        - Do not guess missing values.
+        - Preserve exact job IDs, sites, hosts, disks, and file names.
 
         Inputs:
         [User Question]

@@ -12,7 +12,7 @@ sys.path.append(str(tool_dir))
 import DBTool as dbt
 
 db_path = current_dir.parent / "resources" / "CGsimSite.db"
-output = current_dir.parent / "resources" / "test_sql.jsonl"
+output = current_dir.parent / "resources" / "structured_QA.jsonl"
 
 def randQA_joballocation_jobid(amount: int, cursor: sqlite3.Cursor):
     cmd = """
@@ -30,7 +30,7 @@ def randQA_joballocation_jobid(amount: int, cursor: sqlite3.Cursor):
         ans = ans.format(site = site, ans = row)
         samples.append({"question": temp_Q, "sql": temp_A, "think1": think1, "think2": think2, "tool1": tool1, "tool2": tool2, "answer": ans})
 
-    with open(str(output), "a", encoding="utf-8") as f:
+    with open(str(output), "w", encoding="utf-8") as f:
         for s in samples:
             f.write(json.dumps(s) + "\n")
     return
@@ -216,11 +216,11 @@ def main():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    randQA_joballocation_jobid(200, cursor)
-    randQA_joballocation_resource_extraction(200, cursor)
-    randQA_filetransfer_mix(200, cursor)
-    randQA_fileread_mix(200, cursor)
-    randQA_jobexecution_mix(200, cursor)
+    randQA_joballocation_jobid(100, cursor)
+    randQA_joballocation_resource_extraction(100, cursor)
+    randQA_filetransfer_mix(100, cursor)
+    randQA_fileread_mix(100, cursor)
+    randQA_jobexecution_mix(100, cursor)
     check_allsql(cursor, output)
 
     # result = dbt.check_All(cursor)

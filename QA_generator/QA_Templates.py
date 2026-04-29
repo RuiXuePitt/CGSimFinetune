@@ -1,15 +1,20 @@
 # question, sql, think1, think2, tool1, tool2
+RC_ALLOC = "According to 'allocation' in the question, check_JobAllocation should be used.\n"
+RC_TRANSFER = "According to 'transfer' in the question, check_FileTransfer should be used.\n"
+RC_READ = "According to 'read' in the question, check_FileRead should be used.\n"
+RC_WRITE = "According to 'write' in the question, check_FileWrite should be used.\n"
+RC_EXEC = "According to 'execution' in the question, check_JobExecution should be used.\n"
+RC_AMBIG = "The event type is not clear, so check_All should be used.\n"
+
+RS_DISTINCT = "Need filters, json_extract, and DISTINCT.\n"
+RS_FILTER_JSON = "Need filters and json_extract.\n"
+
 TEMPLATE_JOBALLOCATION_JOBID = [
     (
         "What is the allocation job id at site {site}?",
         "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'allocation', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'allocation', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'job id', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
+        RC_ALLOC,
+        "Need filters, json_extract, and DISTINCT.\n",
         "check_JobAllocation",
         "execute_sql",
         "At site '{site}', the allocated job id is '{ans}'."
@@ -17,13 +22,8 @@ TEMPLATE_JOBALLOCATION_JOBID = [
     (
         "At site {site}, what is the allocated job id?",
         "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'allocated', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'allocated', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'job id', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
+        RC_ALLOC,
+        "Need filters, json_extract, and DISTINCT.\n",
         "check_JobAllocation",
         "execute_sql",
         "At site '{site}', the allocated job id is '{ans}'."
@@ -31,13 +31,8 @@ TEMPLATE_JOBALLOCATION_JOBID = [
     (
         "List the allocated JOB_IDs for JobAllocation events at site {site}.",
         "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'JobAllocation events', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'JobAllocation events', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'JOB_IDs', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
+        RC_ALLOC,
+        "Need filters, json_extract, and DISTINCT.\n",
         "check_JobAllocation",
         "execute_sql",
         "At site '{site}', the allocated job id is '{ans}'."
@@ -45,13 +40,8 @@ TEMPLATE_JOBALLOCATION_JOBID = [
     (
         "Which job IDs were allocated at {site} site?",
         "SELECT DISTINCT JOB_ID FROM EVENTS WHERE EVENT = 'JobAllocation' AND json_extract(METADATA, '$.site') = '{site}';",
-        "Let's think step by step.\n"
-        "According to 'allocated', JobAllocation data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'allocated', EVENT = 'JobAllocation' may be used.\n"
-        "According to 'job IDs', JOB_ID may be selected.\n"
-        "According to 'site', json_extract(METADATA, '$.site') may be used for filtering.\n"
-        "According to 'unique', DISTINCT may be used.\n",
+        RC_ALLOC,
+        "Need filters, json_extract, and DISTINCT.\n",
         "check_JobAllocation",
         "execute_sql",
         "At site '{site}', the allocated job id is '{ans}'."
@@ -66,14 +56,9 @@ TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION = [
         "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS value "
         "FROM EVENTS WHERE EVENT = 'JobAllocation' AND JOB_ID = {jobid};",
 
-        "Let's think step by step.\n"
-        "According to 'JobAllocation', JobAllocation data structure should be checked.\n",
+        RC_ALLOC,
+        RS_DISTINCT,
 
-        "Let's think step by step.\n"
-        "According to 'JobAllocation', EVENT='JobAllocation' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-        
         "check_JobAllocation",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobAllocation record, and the value is '{ans}'."
@@ -83,14 +68,9 @@ TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION = [
 
         "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS {field2} FROM EVENTS WHERE EVENT = 'JobAllocation' AND JOB_ID = {jobid};",
 
-        "Let's think step by step.\n"
-        "The EVENT type is not specified. Therefore, all available event types and their data structures should be checked.\n",
+        RC_AMBIG,
+        RS_DISTINCT,
 
-        "Let's think step by step.\n"
-        "According to checked data structure, {field1} may be related to {field2} in EVENT = 'JobAllocation'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-        
         "check_All",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobAllocation record, and the value is '{ans}'."
@@ -101,13 +81,8 @@ TEMPLATE_JOBALLOCATION_RESOURCE_EXTRACTION = [
         "SELECT DISTINCT json_extract(METADATA, '$.{field2}') AS {field2} "
         "FROM EVENTS WHERE EVENT = 'JobAllocation' AND JOB_ID = {jobid};",
 
-        "Let's think step by step.\n"
-        "According to 'allocation', JobAllocation data structure should be checked.\n",
-
-        "Let's think step by step.\n"
-        "According to 'allocation', EVENT = 'JobAllocation' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_ALLOC,
+        RS_DISTINCT,
 
         "check_JobAllocation",
         "execute_sql",
@@ -123,12 +98,8 @@ TEMPLATE_FILETRANSFER_MIX = [
         "WHERE EVENT = 'FileTransfer' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "According to 'file transfer', FileTransfer data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'file transfer', EVENT = 'FileTransfer' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_TRANSFER,
+        RS_DISTINCT,
         "check_FileTransfer",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileTransfer record, and the value is '{ans}'."
@@ -139,12 +110,8 @@ TEMPLATE_FILETRANSFER_MIX = [
         "WHERE EVENT = 'FileTransfer' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "The EVENT type is not specified. Therefore, all available event types and their data structures should be checked.\n",
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileTransfer'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_AMBIG,
+        RS_DISTINCT,
         "check_All",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileTransfer record, and the value is '{ans}'."
@@ -155,19 +122,9 @@ TEMPLATE_FILETRANSFER_MIX = [
         "WHERE EVENT = 'FileTransfer' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-
-        # think1 (conservative trigger)
-        "Let's think step by step.\n"
-        "According to 'transfer', the EVENT type may be FileTransfer but is not certain.\n"
-        "Therefore, all available event types and their data structures should be checked.\n",
-
-        # think2 (commit after structure check; tool1res comes as next-turn input)
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileTransfer'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-
-        "check_All",
+        RC_TRANSFER,
+        RS_DISTINCT,
+        "check_FileTransfer",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileTransfer record, and the value is '{ans}'."
     )
@@ -181,12 +138,8 @@ TEMPLATE_FILEREAD_MIX = [
         "WHERE EVENT = 'FileRead' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "According to 'file reading', FileRead data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'file reading', EVENT = 'FileRead' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_READ,
+        RS_DISTINCT,
         "check_FileRead",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileRead record, and the value is '{ans}'."
@@ -197,12 +150,8 @@ TEMPLATE_FILEREAD_MIX = [
         "WHERE EVENT = 'FileRead' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "The EVENT type is not specified. Therefore, all available event types and their data structures should be checked.\n",
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileRead'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_AMBIG,
+        RS_DISTINCT,
         "check_All",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileRead record, and the value is '{ans}'."
@@ -213,19 +162,9 @@ TEMPLATE_FILEREAD_MIX = [
         "WHERE EVENT = 'FileRead' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-
-        # think1 (conservative trigger)
-        "Let's think step by step.\n"
-        "According to 'reading task', the EVENT type may be FileRead but is not certain.\n"
-        "Therefore, all available event types and their data structures should be checked.\n",
-
-        # think2 (commit after structure check; tool1res comes as next-turn input)
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileRead'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-
-        "check_All",
+        RC_READ,
+        RS_DISTINCT,
+        "check_FileRead",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileRead record, and the value is '{ans}'."
     )
@@ -239,12 +178,8 @@ TEMPLATE_FILEWRITE_MIX = [
         "WHERE EVENT = 'FileWrite' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "According to 'file writing', FileWrite data structure should be checked.\n",
-        "Let's think step by step.\n"
-        "According to 'file writing', EVENT = 'FileWrite' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_WRITE,
+        RS_DISTINCT,
         "check_FileWrite",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileWrite record, and the value is '{ans}'."
@@ -255,12 +190,8 @@ TEMPLATE_FILEWRITE_MIX = [
         "WHERE EVENT = 'FileWrite' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-        "Let's think step by step.\n"
-        "The EVENT type is not specified. Therefore, all available event types and their data structures should be checked.\n",
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileWrite'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_AMBIG,
+        RS_DISTINCT,
         "check_All",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileWrite record, and the value is '{ans}'."
@@ -271,19 +202,9 @@ TEMPLATE_FILEWRITE_MIX = [
         "WHERE EVENT = 'FileWrite' "
         "AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
-
-        # think1 (conservative trigger)
-        "Let's think step by step.\n"
-        "According to 'writing task', the EVENT type may be FileWrite but is not certain.\n"
-        "Therefore, all available event types and their data structures should be checked.\n",
-
-        # think2 (commit after structure check; tool1res comes as next-turn input)
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'FileWrite'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-
-        "check_All",
+        RC_WRITE,
+        RS_DISTINCT,
+        "check_FileWrite",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the FileWrite record, and the value is '{ans}'."
     )
@@ -297,13 +218,8 @@ TEMPLATE_JOBEXECUTION_MIX = [
         "FROM EVENTS WHERE EVENT = 'JobExecution' AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
 
-        "Let's think step by step.\n"
-        "According to 'JobExecution', JobExecution data structure should be checked.\n",
-
-        "Let's think step by step.\n"
-        "According to 'JobExecution', EVENT = 'JobExecution' may be used.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_EXEC,
+        RS_DISTINCT,
 
         "check_JobExecution",
         "execute_sql",
@@ -316,13 +232,8 @@ TEMPLATE_JOBEXECUTION_MIX = [
         "FROM EVENTS WHERE EVENT = 'JobExecution' AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
 
-        "Let's think step by step.\n"
-        "The EVENT type is not specified. Therefore, all available event types and their data structures should be checked.\n",
-
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'JobExecution'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
+        RC_AMBIG,
+        RS_DISTINCT,
 
         "check_All",
         "execute_sql",
@@ -335,16 +246,10 @@ TEMPLATE_JOBEXECUTION_MIX = [
         "FROM EVENTS WHERE EVENT = 'JobExecution' AND JOB_ID = {jobid} "
         "AND json_extract(METADATA, '$.{field2}') IS NOT NULL;",
 
-        "Let's think step by step.\n"
-        "According to 'execution', the EVENT type may be JobExecution but is not certain.\n"
-        "Therefore, all available event types and their data structures should be checked.\n",
+        RC_EXEC,
+        RS_DISTINCT,
 
-        "Let's think step by step.\n"
-        "According to checked data structure, '{field1}' may be related to '{field2}' in EVENT = 'JobExecution'.\n"
-        "According to '{jobid}', JOB_ID may be used for filtering.\n"
-        "According to '{field1}', use json_extract(METADATA, '$.{field2}') to retrieve the value.\n",
-
-        "check_All",
+        "check_JobExecution",
         "execute_sql",
         "For job '{jobid}', the '{field1}' is related to '{field2}' in the JobExecution record, and the value is '{ans}'."
     )
