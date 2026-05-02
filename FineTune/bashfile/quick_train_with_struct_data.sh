@@ -46,7 +46,7 @@ shifter \
         pip install --no-cache-dir -r  requirements.txt
 
         echo \"Start Training\"
-        python FineTune/CGSimFineTune.py
+        python -m FineTune.script.CGSimFineTune
     "
 EXIT_CODE=$?
 

@@ -5,31 +5,27 @@ Loss function is weighted for format matching.
 Rui XUE
 """
 
-import traintools as tt
+import os
+import sys
+import FineTune.traintools as tt
+from FineTune.config_loader import STEP_3_CONFIG
 import json
 import matplotlib.pyplot as plt
 import torch
 from datasets import Dataset
 from pathlib import Path
-import os
 import math
 
-home = os.environ.get("HOME")
-scratch = os.environ.get("PSCRATCH")
-if scratch:
-    currdir = Path(scratch) / "CGSimFinetune" / "FineTune"
-else:
-    currdir = Path(__file__).parent
-TRAINDATA_PATH = Path(scratch) / "resources" / "AI_QA_v1" / "train_AI_QA_dataset_v1.jsonl"
-base_model_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
-version = "nemotron-llama8b-CGsim_highqual_v1_weightedloss"
-subversion = "v2"
+TRAINDATA = os.path.expandvars(STEP_3_CONFIG["TRAINDATA"])
+REPOID = STEP_3_CONFIG["BASE_MODEL"]
+VERSION = STEP_3_CONFIG["VERSION"]
+OUTPUT_DIR = Path(os.path.expandvars(STEP_3_CONFIG["OUTPUT_DIR"]))
 
-STEP2_ADAPTER = str(Path(scratch) / "run" / "nemotron-llama8b-CGsim_highqual_v1" / "checkpoints" / "checkpoint-210")
-CHECKPOINT_DIR = str(Path(scratch) / "run" / version / subversion / "checkpoints")
-LOGGING_DIR = str(Path(scratch) / "run" / version / subversion / "logs")
-lossplot_dir = str(Path(home) / "run" / version / subversion)
-fig_path = str(Path(lossplot_dir) / "lossplot_HighQual_weightedloss.png")
+ADAPTER = os.path.expandvars(STEP_3_CONFIG["LORA_ADAPTER"])
+CHECKPOINT_DIR = str(OUTPUT_DIR / VERSION / "checkpoints")
+LOGGING_DIR = str(OUTPUT_DIR / VERSION / "logs")
+LOSSPLOT_DIR = str(OUTPUT_DIR / VERSION)
+fig_path = str(Path(LOSSPLOT_DIR) / "lossplot_HighQual_weightedloss.png")
 
 # ============================================
 # Weighted Loss Config
@@ -46,7 +42,7 @@ W_JSON_MARKER = 20.0 #v1
 
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 os.makedirs(LOGGING_DIR, exist_ok=True)
-os.makedirs(lossplot_dir, exist_ok=True)
+os.makedirs(LOSSPLOT_DIR, exist_ok=True)
 
 from transformers import (
     AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
@@ -156,9 +152,9 @@ def collect_weight_spans(example, rendered_text: str):
                     #     spans.append((s, e, W_JSON_EXTRACT))
                 
                 if name == "execute_sql":
-                    # # $. is often omitted
-                    # for s, e in find_spans(rendered_text, "$."):
-                    #     spans.append((s, e, W_JSON_MARKER))
+                    # $. is often omitted
+                    for s, e in find_spans(rendered_text, "$."):
+                        spans.append((s, e, W_JSON_MARKER))
 
                     # full json_extract(METADATA, '$.key') expressions
                     for s, e in find_json_extract_spans(rendered_text):
@@ -261,7 +257,7 @@ def load_QLoRA_Model(base_model_id: str):
         torch_dtype=torch.bfloat16,
         trust_remote_code=True)
 
-    ft_model = PeftModel.from_pretrained(base_model, STEP2_ADAPTER, is_trainable=True)
+    ft_model = PeftModel.from_pretrained(base_model, ADAPTER, is_trainable=True)
 
     # summary of GPU resource after loading
     print("allocated GiB:", torch.cuda.memory_allocated()/1024**3)
@@ -394,7 +390,7 @@ def set_train_config(model, processed_ds, tokenizer):
     eval_steps = 10 # evaluate every 10 optimizer updates = 10 * grad_accum * batch samples
     total_epoch = 1 # overwritten when max_steps > 0
     save_steps = 10 # save checkpoint every 10 optimizer updates
-    max_steps = 100 # total optimizer updates
+    max_steps = 200 # total optimizer updates
 
     learning_rate = 3e-5
 
@@ -463,9 +459,9 @@ def train():
     '''
     Futher Train a finetuned model.
     '''
-    tokenizer = load_tokenizer(base_model_id)
+    tokenizer = load_tokenizer(REPOID)
     processed_ds = process_data(tokenizer)
-    ft_model = load_QLoRA_Model(base_model_id)
+    ft_model = load_QLoRA_Model(REPOID)
     trainer = set_train_config(ft_model, processed_ds, tokenizer)
     out = trainer.train()
     history = trainer.state.log_history
@@ -473,6 +469,19 @@ def train():
     return out, history
 
 def main():
+    print("\n", "=="*10)
+    print("STEP 3 of Training:")
+    print(f"Train Data from: {TRAINDATA}")
+    print(f"Base Model from: {REPOID}")
+    print(f"Adapter from: {ADAPTER}")
+    print("=="*10, "\n")
+
+    with open(LOGGING_DIR+"/summary.txt", 'w') as f:
+        f.write("STEP 3 of Training:\n")
+        f.write(f"Train Data from: {TRAINDATA}\n")
+        f.write(f"Base Model from: {REPOID}\n")
+        f.write(f"Adapter from: {ADAPTER}\n")
+
     _, history = train()
 
     train_steps, train_loss = [], []

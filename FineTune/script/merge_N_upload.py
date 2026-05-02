@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from FineTune.config_loader import MERGE_N_UPLOAD
+
 pscratch = os.environ["PSCRATCH"]
 os.environ["HF_HOME"]=str(Path(pscratch)/".hf")
 hf_home = os.environ["HF_HOME"]
@@ -10,11 +12,11 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 def merge_and_push_model():
-    base_model_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
-    adapter_path = os.path.expandvars("${HOME}/run/nemotron-llama8b-CGsim/checkpoint-250")
+    base_model_id = MERGE_N_UPLOAD["BASE_MODEL"]
+    adapter_path = os.path.expandvars(MERGE_N_UPLOAD["LORA_ADAPTER"])
     print("Adapter From: ", adapter_path)
-    repo_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim-FineTuneV1"
-    commit = "Fine Tune Nemotron V1 (Tool Call, SQL Query, Answer)"
+    repo_id = MERGE_N_UPLOAD["NEW_MODEL_NAME"]
+    commit = MERGE_N_UPLOAD["COMMIT"]
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_id)
 
