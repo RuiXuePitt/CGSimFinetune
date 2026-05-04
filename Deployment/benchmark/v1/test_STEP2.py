@@ -11,12 +11,13 @@ import requests
 import numpy as np
 import traceback
 from pathlib import Path
+from Deployment.config_loader import DEPLOYMENT_DIR, BENCHMARK_CONFIG, HIGHQUAL_BENCH
 
 # ============================================================
 # Project path
 # ============================================================
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = DEPLOYMENT_DIR.resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import Tools.DBTool as dbt
@@ -36,19 +37,22 @@ from transformers import AutoTokenizer
 # Config
 # ============================================================
 
-repo_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
-tokenizer = AutoTokenizer.from_pretrained(repo_id)
+REPOID = HIGHQUAL_BENCH["BASE_MODEL"]
+tokenizer = AutoTokenizer.from_pretrained(REPOID)
 
-RESOURCE_DIR = Path(pscratch) / "resources"
-OUTPUT_DIR = RESOURCE_DIR / "AI_QA_v1_weightedloss" / "Benchmark-Checkpoint-100" / "v2" / "test_bench"
+RESOURCE_DIR = Path(os.path.expandvars(HIGHQUAL_BENCH["RESOURCE_DIR"]))
+OUTPUT_DIR = RESOURCE_DIR / HIGHQUAL_BENCH["BENCH_VER"]
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-TESTDATA_PATH = RESOURCE_DIR / "test_AI_QA_Gen.jsonl"
-DB_PATH = RESOURCE_DIR / "CGSimSite.db"
-TOOL_PATH = RESOURCE_DIR / "tool_prompt.jsonl"
-ERROR_PATH = OUTPUT_DIR / "error_msg.jsonl"
-BENCHMARK_REPORT_PATH = OUTPUT_DIR / "benchmark_report.txt"
+TESTDATA_PATH = RESOURCE_DIR / BENCHMARK_CONFIG["TESTDATA"]
+DB_PATH = RESOURCE_DIR / BENCHMARK_CONFIG["DB"]
+TOOL_PATH = RESOURCE_DIR / BENCHMARK_CONFIG["TOOLPROMPT"]
+GENRES_PATH = OUTPUT_DIR / BENCHMARK_CONFIG["SUCCESS_RES"]
+ERROR_PATH = OUTPUT_DIR / BENCHMARK_CONFIG["ERR_MSG"]
+BENCHMARK_REPORT_PATH = OUTPUT_DIR / BENCHMARK_CONFIG["BENCH_REPORT"]
 
-VLLM_INFO_PATH = Path(pscratch) / "FineTunedLLM_V1_vllm.env"
+VLLM_INFO_PATH = Path(pscratch) / HIGHQUAL_BENCH["VLLM_INFO_PATH"]
+print(VLLM_INFO_PATH)
 
 MAX_ROUNDS = 6
 MAX_TOKENS = 1024
@@ -56,16 +60,16 @@ TEMPERATURE = 0
 TOP_P = 1.0
 REQUEST_TIMEOUT = 180
 
+SYSTEM_PROMPT = BENCHMARK_CONFIG["SYSTEM_PROMPT"]
 
 # ============================================================
 # Error class
 # ============================================================
 
 class CGSimRunError(Exception):
-    def __init__(self, error_type: str, message: str, **extra):
+    def __init__(self, error_type: str, message: str):
         super().__init__(message)
         self.error_type = error_type
-        self.extra = extra
 
 
 # ============================================================
@@ -112,8 +116,7 @@ def log_error(
     last_model_output: str | None,
     error_type: str,
     error_message: str,
-    step: int | None = None,
-    extra: dict | None = None,
+    step: int | None = None
 ):
     ERROR_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -123,8 +126,7 @@ def log_error(
         "error_type": error_type,
         "error_message": error_message,
         "last_model_output": last_model_output,
-        "messages": messages,
-        "extra": extra or {},
+        "messages": messages
     }
 
     with open(ERROR_PATH, "a", encoding="utf-8") as f:
@@ -137,6 +139,7 @@ def log_error(
 
 def get_prompt(messages: list) -> str:
     tool_prompt = get_tool_info()
+
     prompt = tokenizer.apply_chat_template(
         messages,
         tools=tool_prompt,
@@ -174,8 +177,7 @@ def poster(prompt: str) -> tuple[str, dict]:
     except requests.RequestException as e:
         raise CGSimRunError(
             "HTTP_ERROR",
-            str(e),
-            url=url,
+            str(e)
         )
 
     try:
@@ -196,8 +198,7 @@ def poster(prompt: str) -> tuple[str, dict]:
     except Exception as e:
         raise CGSimRunError(
             "VLLM_RESPONSE_PARSE_ERROR",
-            str(e),
-            raw_response=response.text,
+            str(e)
         )
 
 
@@ -219,8 +220,7 @@ def extract_toolcall_block(text: str):
     if e == -1:
         raise CGSimRunError(
             "TOOLCALL_TAG_UNCLOSED",
-            "Found <TOOLCALL>[ but no closing ]</TOOLCALL>.",
-            raw_text=text,
+            "Found <TOOLCALL>[ but no closing ]</TOOLCALL>."
         )
 
     array_json = text[s + len("<TOOLCALL>"): e + 1]
@@ -230,25 +230,19 @@ def extract_toolcall_block(text: str):
     except json.JSONDecodeError as err:
         raise CGSimRunError(
             "TOOLCALL_JSON_ERROR",
-            str(err),
-            array_json=array_json,
-            raw_text=text,
+            str(err)
         )
 
     if not isinstance(calls, list):
         raise CGSimRunError(
             "TOOLCALL_NOT_LIST",
-            "Tool call block is not a JSON list.",
-            array_json=array_json,
-            raw_text=text,
+            "Tool call block is not a JSON list."
         )
 
     if len(calls) == 0:
         raise CGSimRunError(
             "EMPTY_TOOLCALL",
-            "Model generated <TOOLCALL>[]</TOOLCALL>.",
-            array_json=array_json,
-            raw_text=text,
+            "Model generated <TOOLCALL>[]</TOOLCALL>."
         )
 
     toolcall_block = calls[0]
@@ -256,8 +250,7 @@ def extract_toolcall_block(text: str):
     if not isinstance(toolcall_block, dict):
         raise CGSimRunError(
             "TOOLCALL_NOT_DICT",
-            "First tool call is not a JSON object.",
-            toolcall_block=toolcall_block,
+            "First tool call is not a JSON object."
         )
 
     return text[:s], toolcall_block
@@ -314,13 +307,13 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
     print("USER REQUEST:")
     print(usr_request)
 
+    sql = ""
+    checktool = ""
+
     messages = [
         {
             "role": "system",
-            "content": (
-                "You are a CGsim agent. Answer questions related to grid "
-                "simulation related questions. Use tools when needed."
-            ),
+            "content": SYSTEM_PROMPT,
         },
         {
             "role": "user",
@@ -332,8 +325,10 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
     seen_toolcalls = set()
 
     try:
+        elapsed_time = 0.0
         for step in range(max_rounds):
             gen_text, meta = gen_new_text(messages)
+            elapsed_time += meta.get("elapsed",0.0)
             last_model_output = gen_text
 
             messages.append(
@@ -345,8 +340,8 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
 
             print("RAW GEN TEXT:")
             print(gen_text)
-            print("GEN META:")
-            print(meta)
+            # print("GEN META:")
+            # print(meta)
 
             # Important: vLLM generation loop / cutoff detection
             if meta.get("finish_reason") == "length":
@@ -355,10 +350,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
                     (
                         "vLLM stopped because max_tokens was reached. "
                         "The model likely entered a long reasoning loop or failed to terminate."
-                    ),
-                    finish_reason=meta.get("finish_reason"),
-                    max_tokens=MAX_TOKENS,
-                    raw_text=gen_text,
+                    )
                 )
 
             think, toolcall_block = extract_toolcall_block(gen_text)
@@ -369,25 +361,29 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
                 if not answer:
                     raise CGSimRunError(
                         "EMPTY_FINAL_ANSWER",
-                        "No tool call and empty final answer.",
-                        raw_text=gen_text,
+                        "No tool call and empty final answer."
                     )
 
                 print("FINAL ANSWER:")
                 print(answer)
 
+                print("\n", "=="*10)
+                print("=="*5, "Full Messages", "=="*5)
+                print(messages)
+
                 return {
                     "success": True,
+                    "checktool": checktool,
+                    "sql": sql,
                     "answer": answer,
                     "messages": messages,
-                    "elapsed": meta.get("elapsed")
+                    "elapsed": elapsed_time
                 }
 
             if "name" not in toolcall_block:
                 raise CGSimRunError(
                     "TOOLCALL_MISSING_NAME",
-                    "Tool call does not contain key 'name'.",
-                    toolcall_block=toolcall_block,
+                    "Tool call does not contain key 'name'."
                 )
 
             tool_name = toolcall_block["name"]
@@ -398,17 +394,16 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             if toolcall_signature in seen_toolcalls:
                 raise CGSimRunError(
                     "REPEATED_TOOLCALL_LOOP",
-                    "The model repeated the same tool call, likely stuck in a tool-use loop.",
-                    toolcall_block=toolcall_block,
+                    "The model repeated the same tool call, likely stuck in a tool-use loop."
                 )
             seen_toolcalls.add(toolcall_signature)
 
             if tool_name.startswith("check_"):
+                checktool = tool_name
                 if not hasattr(dbt, tool_name):
                     raise CGSimRunError(
                         "UNKNOWN_CHECK_TOOL",
-                        f"Unknown check tool: {tool_name}",
-                        toolcall_block=toolcall_block,
+                        f"Unknown check tool: {tool_name}"
                     )
 
                 tool_result = getattr(dbt, tool_name)(cursor)
@@ -416,54 +411,45 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             elif tool_name == "execute_sql":
                 try:
                     tool_args = toolcall_block["arguments"]["sql"]
+                    sql = tool_args
                 except Exception:
                     raise CGSimRunError(
                         "SQL_ARGUMENT_ERROR",
-                        "execute_sql tool call does not contain arguments.sql.",
-                        toolcall_block=toolcall_block,
+                        "execute_sql tool call does not contain arguments.sql."
                     )
 
-                print("SQL:")
-                print(tool_args)
+                # print("SQL:")
+                # print(tool_args)
 
                 try:
                     tool_result = dbt.execute_sql(cursor, tool_args)
                 except sqlite3.Error as e:
                     raise CGSimRunError(
                         "SQL_EXECUTION_ERROR",
-                        str(e),
-                        sql=tool_args,
-                        toolcall_block=toolcall_block,
+                        str(e)
                     )
                 except Exception as e:
                     raise CGSimRunError(
                         "SQL_TOOL_RUNTIME_ERROR",
-                        str(e),
-                        sql=tool_args,
-                        toolcall_block=toolcall_block,
+                        str(e)
                     )
 
                 if looks_like_sql_error_result(tool_result):
                     raise CGSimRunError(
                         "SQL_HALLUCINATION_OR_EXECUTION_ERROR",
-                        "SQL result appears to contain an execution/schema error.",
-                        sql=tool_args,
-                        tool_result=tool_result,
+                        "SQL result appears to contain an execution/schema error."
                     )
 
                 if is_empty_sql_result(tool_result):
                     raise CGSimRunError(
                         "SQL_EMPTY_RESULT",
-                        "SQL executed but returned empty result.",
-                        sql=tool_args,
-                        tool_result=tool_result,
+                        "SQL executed but returned empty result."
                     )
 
             else:
                 raise CGSimRunError(
                     "UNKNOWN_TOOL",
-                    f"Unknown tool name: {tool_name}",
-                    toolcall_block=toolcall_block,
+                    f"Unknown tool name: {tool_name}"
                 )
 
             messages.append(
@@ -485,8 +471,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             last_model_output=last_model_output,
             error_type=e.error_type,
             error_message=str(e),
-            step=step if "step" in locals() else None,
-            extra=e.extra,
+            step=step if "step" in locals() else None
         )
 
         print(f"[FAILED] {e.error_type}: {e}")
@@ -506,8 +491,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             last_model_output=last_model_output,
             error_type="UNEXPECTED_ERROR",
             error_message=str(e),
-            step=step if "step" in locals() else None,
-            extra={"traceback": traceback.format_exc()},
+            step=step if "step" in locals() else None
         )
 
         print(f"[FAILED] UNEXPECTED_ERROR: {e}")
@@ -535,6 +519,7 @@ def main():
     n_failed = 0
 
     error_counter = {}
+    gen_output = open(GENRES_PATH, 'w')
 
     try:
         for idx, usr_request, raw_case in load_testcases(TESTDATA_PATH):
@@ -548,19 +533,21 @@ def main():
             if result["success"]:
                 n_success += 1
                 t_success += result["elapsed"]
+                success_execute = {"user_question": usr_request, "checktool": result["checktool"], "sql": result["sql"], "answer": result["answer"]}
+                gen_output.write(json.dumps(success_execute, ensure_ascii=False, default=str) + "\n")
             else:
                 n_failed += 1
                 err = result.get("error_type", "UNKNOWN")
                 error_counter[err] = error_counter.get(err, 0) + 1
 
         success_rate = n_success*1.0/n_total
-        p95_cl = 1.95 * np.sqrt( success_rate*(1-success_rate)/n_total )
+        p68_cl = np.sqrt( success_rate*(1-success_rate)/n_total )
 
         print("=" * 100)
         print("BENCHMARK SUMMARY")
         print(f"Total:   {n_total}")
         print(f"Success: {n_success}")
-        print(f"Success rate: ({success_rate*100:.2f} ± {p95_cl*100:.2f})%")
+        print(f"Success rate: ({success_rate*100:.2f} ± {p68_cl*100:.2f})%")
         print(f"Average Time for Succeeded Generation: {t_success/n_success} s")
         print(f"Failed:  {n_failed}")
         print("Error breakdown:")
@@ -574,7 +561,7 @@ def main():
             f.write(f"Input TestCase: {TESTDATA_PATH}\n")
             f.write(f"Total:   {n_total}\n")
             f.write(f"Success: {n_success}\n")
-            f.write(f"Success rate: ({success_rate*100:.2f} ± {p95_cl*100:.2f})%")
+            f.write(f"Success rate: ({success_rate*100:.2f} ± {p68_cl*100:.2f})% ")
             f.write(f"Average Time for Succeeded Generation: {t_success/n_success} s\n")
             f.write(f"Failed: {n_failed}\n")
             f.write("Error breakdown:\n")

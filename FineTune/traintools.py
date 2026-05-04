@@ -1,3 +1,4 @@
+import json
 IGNORE_INDEX = -100
 
 def _find_all_subseq(haystack, needle):
@@ -57,10 +58,64 @@ def build_labels_by_special_tags(input_ids, tokenizer):
 
     return labels
 
+def render_masked_view(input_ids, labels, tokenizer, mask_token="▁▁"):
+    """
+    returns:
+      1) full_text: decode all tokens
+      2) trained_text: only keep contexts not used for training
+    """
+    assert len(input_ids) == len(labels)
+
+    # 1) decode all
+    full_text = tokenizer.decode(input_ids, skip_special_tokens=False)
+
+    # 2) token-by-token decode，mask out ignore
+    toks = tokenizer.convert_ids_to_tokens(input_ids)
+
+    shown_pieces = []
+    for tok, lab in zip(toks, labels):
+        if lab == IGNORE_INDEX:
+            shown_pieces.append(mask_token)
+        else:
+            shown_pieces.append(tok)
+
+    # integrate token pieces to readable text
+    trained_text = tokenizer.convert_tokens_to_string(shown_pieces)
+
+    return full_text, trained_text
+
+def load_data(datapath: str):
+    '''
+    Load datasets for training & validation.
+    The datasets should never be used for testing.
+    '''
+    train_data = []
+    with open(str(datapath), "r") as f:
+        for line in f:
+            train_data.append(json.loads(line))
+    return train_data
+
 def tokenize_and_mask(example, tokenizer, max_length=5120):
+    """
+    CoT + Tool Calling
+    """
     text = tokenizer.apply_chat_template(
         example["messages"],
         tools=example.get("tools"),
+        tokenize=False,
+        add_generation_prompt=False,
+    )
+    enc = tokenizer(text, truncation=True, max_length=max_length, add_special_tokens=False)
+    input_ids = enc["input_ids"]
+    labels = build_labels_by_special_tags(input_ids, tokenizer)
+    return {"input_ids": input_ids, "attention_mask": enc["attention_mask"], "labels": labels}
+
+def tokenize_and_mask_onlySQL(example, tokenizer, max_length=5120):
+    """
+    Only SQL
+    """
+    text = tokenizer.apply_chat_template(
+        example["messages"],
         tokenize=False,
         add_generation_prompt=False,
     )

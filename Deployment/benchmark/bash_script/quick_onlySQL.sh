@@ -3,7 +3,7 @@
 # Quick Deploy Base Model + LoRA Adapter Through vLLM, using salloc
 # Rui Xue
 
-salloc -C "gpu&hbm40g" -q interactive -t 01:00:00 -A m2616_g --gpus 1 srun --pty bash -lc '
+salloc -C "gpu&hbm40g" -q interactive -t 00:30:00 -A m2616_g --gpus 1 srun --pty bash -lc '
 echo "================================================================================"
 echo "RUN QUICK Base Model + LoRA Adapter Model vLLM Deploy"
 echo "================================================================================"
@@ -20,7 +20,7 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 BASE_MODEL_ID="AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
 SERVED_MODEL_NAME="askcgsim-base"
 LORA_MODEL_NAME="askcgsim-ft"
-LORA_ADAPTER="$PSCRATCH/run/nemotron-llama8b-CGsim_highqual_v1_weightedloss/v2/checkpoints/checkpoint-100"
+LORA_ADAPTER="$PSCRATCH/run/nemotron-llama8b-CGsim_highqual_onlySQL/checkpoints/checkpoint-210"
 
 PORT=$((18000 + SLURM_JOB_ID % 20000))
 

@@ -16,6 +16,10 @@ from datasets import Dataset
 from pathlib import Path
 import math
 
+# ============================================================
+# Config
+# ============================================================
+SEED = 42
 TRAINDATA = os.path.expandvars(STEP_3_CONFIG["TRAINDATA"])
 REPOID = STEP_3_CONFIG["BASE_MODEL"]
 VERSION = STEP_3_CONFIG["VERSION"]
@@ -26,6 +30,7 @@ CHECKPOINT_DIR = str(OUTPUT_DIR / VERSION / "checkpoints")
 LOGGING_DIR = str(OUTPUT_DIR / VERSION / "logs")
 LOSSPLOT_DIR = str(OUTPUT_DIR / VERSION)
 fig_path = str(Path(LOSSPLOT_DIR) / "lossplot_HighQual_weightedloss.png")
+# ============================================================
 
 # ============================================
 # Weighted Loss Config
@@ -44,10 +49,15 @@ os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 os.makedirs(LOGGING_DIR, exist_ok=True)
 os.makedirs(LOSSPLOT_DIR, exist_ok=True)
 
+
 from transformers import (
-    AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
+    set_seed, AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
     TrainingArguments, Trainer, DataCollatorForSeq2Seq)
 from peft import PeftModel
+
+# ============================================================
+set_seed(SEED)
+# ============================================================
 
 def load_data():
     '''
@@ -55,10 +65,10 @@ def load_data():
     The datasets should never be used for testing.
     '''
     train_data = []
-    with open(str(TRAINDATA_PATH), "r") as f:
+    with open(str(TRAINDATA), "r") as f:
         for line in f:
             train_data.append(json.loads(line))
-    print(TRAINDATA_PATH)
+    print(TRAINDATA)
     print(len(train_data))
     print(train_data[0])
     return train_data
@@ -390,7 +400,7 @@ def set_train_config(model, processed_ds, tokenizer):
     eval_steps = 10 # evaluate every 10 optimizer updates = 10 * grad_accum * batch samples
     total_epoch = 1 # overwritten when max_steps > 0
     save_steps = 10 # save checkpoint every 10 optimizer updates
-    max_steps = 200 # total optimizer updates
+    max_steps = 100 # total optimizer updates
 
     learning_rate = 3e-5
 
@@ -415,6 +425,11 @@ def set_train_config(model, processed_ds, tokenizer):
         learning_rate=learning_rate,
         bf16=True,
         optim="paged_adamw_8bit",
+
+        seed=SEED,
+        data_seed=SEED,
+        dataloader_num_workers=0,
+
         logging_dir=LOGGING_DIR,        # Directory for storing logs
         save_strategy="steps",       # Save the model checkpoint every logging step
         save_steps=save_steps,                # Save checkpoints every 100 steps
@@ -427,7 +442,7 @@ def set_train_config(model, processed_ds, tokenizer):
         label_names=["labels", "loss_weights"]
     )
 
-    splits = processed_ds.train_test_split(test_size=0.1, seed=42)
+    splits = processed_ds.train_test_split(test_size=0.1, seed=SEED)
     train_ds = splits["train"]
     eval_ds  = splits["test"]
 

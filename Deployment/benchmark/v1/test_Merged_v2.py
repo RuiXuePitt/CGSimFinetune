@@ -1,3 +1,7 @@
+"""
+Test Already Integrated Model
+Rui XUE
+"""
 import os
 import sys
 import json
@@ -5,14 +9,14 @@ import time
 import sqlite3
 import requests
 import traceback
+import numpy as np
 from pathlib import Path
-from datetime import datetime
 
 # ============================================================
 # Project path
 # ============================================================
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import Tools.DBTool as dbt
@@ -32,15 +36,18 @@ from transformers import AutoTokenizer
 # Config
 # ============================================================
 
-repo_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim-FineTuneV1"
+repo_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
 tokenizer = AutoTokenizer.from_pretrained(repo_id)
 
 RESOURCE_DIR = Path(pscratch) / "resources"
+OUTPUT_DIR = RESOURCE_DIR / "MergedModel_v2"
 
 TESTDATA_PATH = RESOURCE_DIR / "test_AI_QA_Gen.jsonl"
 DB_PATH = RESOURCE_DIR / "CGSimSite.db"
 TOOL_PATH = RESOURCE_DIR / "tool_prompt.jsonl"
-ERROR_PATH = RESOURCE_DIR / "error_msg.jsonl"
+GENRES_PATH = OUTPUT_DIR / "generate_result.jsonl"
+ERROR_PATH = OUTPUT_DIR / "error_msg.jsonl"
+BENCHMARK_REPORT_PATH = OUTPUT_DIR / "benchmark_report.txt"
 
 VLLM_INFO_PATH = Path(pscratch) / "FineTunedLLM_V1_vllm.env"
 
@@ -112,7 +119,6 @@ def log_error(
     ERROR_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     record = {
-        "time": datetime.now().isoformat(),
         "user_request": user_request,
         "step": step,
         "error_type": error_type,
@@ -140,6 +146,8 @@ def get_prompt(messages: list) -> str:
         add_generation_prompt=True,
     )
 
+    # print("\n", "=="*10, "PROMPT:", prompt)
+    # print("PROMPT ENDS\n", "=="*10)
     return prompt
 
 
@@ -310,13 +318,13 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
     print("USER REQUEST:")
     print(usr_request)
 
+    sql = ""
+    checktool = ""
+
     messages = [
         {
             "role": "system",
-            "content": (
-                "You are a CGsim agent. Answer questions related to grid "
-                "simulation related questions. Use tools when needed."
-            ),
+            "content": SYSTEM_PROMPT,
         },
         {
             "role": "user",
@@ -328,8 +336,10 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
     seen_toolcalls = set()
 
     try:
+        elapsed_time = 0.0
         for step in range(max_rounds):
             gen_text, meta = gen_new_text(messages)
+            elapsed_time += meta.get("elapsed",0.0)
             last_model_output = gen_text
 
             messages.append(
@@ -341,8 +351,8 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
 
             print("RAW GEN TEXT:")
             print(gen_text)
-            print("GEN META:")
-            print(meta)
+            # print("GEN META:")
+            # print(meta)
 
             # Important: vLLM generation loop / cutoff detection
             if meta.get("finish_reason") == "length":
@@ -369,13 +379,20 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
                         raw_text=gen_text,
                     )
 
-                print("FINAL ANSWER:")
+                print("\nFINAL ANSWER:")
                 print(answer)
+
+                print("\n", "=="*10)
+                print("=="*5, "Full Messages", "=="*5)
+                print(messages)
 
                 return {
                     "success": True,
+                    "checktool": checktool,
+                    "sql": sql,
                     "answer": answer,
                     "messages": messages,
+                    "elapsed": elapsed_time
                 }
 
             if "name" not in toolcall_block:
@@ -399,6 +416,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             seen_toolcalls.add(toolcall_signature)
 
             if tool_name.startswith("check_"):
+                checktool = tool_name
                 if not hasattr(dbt, tool_name):
                     raise CGSimRunError(
                         "UNKNOWN_CHECK_TOOL",
@@ -411,6 +429,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             elif tool_name == "execute_sql":
                 try:
                     tool_args = toolcall_block["arguments"]["sql"]
+                    sql = tool_args
                 except Exception:
                     raise CGSimRunError(
                         "SQL_ARGUMENT_ERROR",
@@ -418,8 +437,8 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
                         toolcall_block=toolcall_block,
                     )
 
-                print("SQL:")
-                print(tool_args)
+                # print("SQL:")
+                # print(tool_args)
 
                 try:
                     tool_result = dbt.execute_sql(cursor, tool_args)
@@ -526,9 +545,11 @@ def main():
 
     n_total = 0
     n_success = 0
+    t_success = 0.0
     n_failed = 0
 
     error_counter = {}
+    gen_output = open(GENRES_PATH, 'w')
 
     try:
         for idx, usr_request, raw_case in load_testcases(TESTDATA_PATH):
@@ -541,25 +562,46 @@ def main():
 
             if result["success"]:
                 n_success += 1
+                t_success += result["elapsed"]
+                success_execute = {"user_question": usr_request, "checktool": result["checktool"], "sql": result["sql"], "answer": result["answer"]}
+                gen_output.write(json.dumps(success_execute, ensure_ascii=False, default=str) + "\n")
             else:
                 n_failed += 1
                 err = result.get("error_type", "UNKNOWN")
                 error_counter[err] = error_counter.get(err, 0) + 1
 
+        success_rate = n_success*1.0/n_total
+        p68_cl = np.sqrt( success_rate*(1-success_rate)/n_total )
+
         print("=" * 100)
         print("BENCHMARK SUMMARY")
         print(f"Total:   {n_total}")
         print(f"Success: {n_success}")
+        print(f"Success rate: ({success_rate*100:.2f} ± {p68_cl*100:.2f})%")
+        print(f"Average Time for Succeeded Generation: {t_success/n_success} s")
         print(f"Failed:  {n_failed}")
         print("Error breakdown:")
         for k, v in sorted(error_counter.items(), key=lambda x: -x[1]):
             print(f"  {k}: {v}")
         print(f"Errors written to: {ERROR_PATH}")
+        print(f"Benchmark Report written to: {BENCHMARK_REPORT_PATH}")
+        
+        with open(str(BENCHMARK_REPORT_PATH), 'w') as f:
+            f.write("BENCHMARK SUMMARY\n")
+            f.write(f"Total:   {n_total}\n")
+            f.write(f"Success: {n_success}\n")
+            f.write(f"Success rate: ({success_rate*100:.2f} ± {p68_cl*100:.2f})% ")
+            f.write(f"Average Time for Succeeded Generation: {t_success/n_success} s\n")
+            f.write(f"Failed: {n_failed}\n")
+            f.write("Error breakdown:\n")
+            for k, v in sorted(error_counter.items(), key=lambda x: -x[1]):
+                f.write(f"  {k}: {v}\n")
+            f.write(f"Errors written to: {ERROR_PATH}\n")
 
     finally:
         cursor.close()
         conn.close()
-
+    gen_output.close()
 
 if __name__ == "__main__":
     main()

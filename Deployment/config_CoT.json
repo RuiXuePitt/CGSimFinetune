@@ -1,0 +1,23 @@
+{   
+    "TESTDATA": "test_AI_QA_Gen.jsonl",
+    "DB": "CGSimSite.db",
+    "TOOLPROMPT": "tool_prompt.jsonl",
+    "SUCCESS_RES":  "generate_result.jsonl",
+    "ERR_MSG": "error_msg.jsonl",
+    "BENCH_REPORT": "benchmark_report.txt",
+    "SYSTEM_PROMPT": "You are a CGsim agent. Answer questions related to grid simulation related questions. Use tools when needed.",
+    "HIGHQUAL_BENCH": {
+        "BASE_MODEL": "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim",
+        "RESOURCE_DIR": "$PSCRATCH/resources",
+        "BENCH_VER": "Benchmark_CoT_new/STEP2-Checkpoint-210/test_bench",
+        "ADAPTER": "$PSCRATCH/run/nemotron-llama8b-CGsim_highqual_CoT_new/checkpoints/checkpoint-210",
+        "VLLM_INFO_PATH": "FineTunedLLM_STEP2_CoT.env"
+    },
+    "WL_BENCH": {
+        "BASE_MODEL": "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim",
+        "RESOURCE_DIR": "$PSCRATCH/resources",
+        "BENCH_VER": "Benchmark_CoT_new/STEP3-Checkpoint-100/test_bench",
+        "ADAPTER": "$PSCRATCH/run/nemotron-llama8b-CGsim_highqual_CoT_weightedloss_new/checkpoints/checkpoint-100",
+        "VLLM_INFO_PATH": "FineTunedLLM_STEP3_CoT.env"
+    }
+}

@@ -8,6 +8,7 @@ import json
 import time
 import sqlite3
 import requests
+import numpy as np
 import traceback
 from pathlib import Path
 
@@ -39,11 +40,12 @@ repo_id = "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
 tokenizer = AutoTokenizer.from_pretrained(repo_id)
 
 RESOURCE_DIR = Path(pscratch) / "resources"
-OUTPUT_DIR = RESOURCE_DIR / "AI_QA_v1" / "Benchmark-Checkpoint-210"
+OUTPUT_DIR = RESOURCE_DIR / "Benchmark_OnlySQL" / "Benchmark-Checkpoint-210" / "test_bench"
 
-TESTDATA_PATH = RESOURCE_DIR / "AI_QA_v1" / "ready2train.jsonl"
+TESTDATA_PATH = RESOURCE_DIR / "test_AI_QA_Gen.jsonl"
 DB_PATH = RESOURCE_DIR / "CGSimSite.db"
-TOOL_PATH = RESOURCE_DIR / "tool_prompt.jsonl"
+
+GENRES_PATH = OUTPUT_DIR / "generate_result.jsonl"
 ERROR_PATH = OUTPUT_DIR / "error_msg.jsonl"
 BENCHMARK_REPORT_PATH = OUTPUT_DIR / "benchmark_report.txt"
 
@@ -55,6 +57,7 @@ TEMPERATURE = 0
 TOP_P = 1.0
 REQUEST_TIMEOUT = 180
 
+SYSTEM_PROMPT = "You are a CGsim agent. Answer questions related to grid simulation related questions. Use SQL queries and information got from SQL to help answer the question."
 
 # ============================================================
 # Error class
@@ -81,12 +84,6 @@ def load_info_file(filepath: Path) -> dict:
             key, value = line.split("=", 1)
             env[key.strip()] = value.strip()
     return env
-
-
-def get_tool_info() -> list:
-    with open(TOOL_PATH, "r", encoding="utf-8") as f:
-        line = f.readline()
-        return json.loads(line)["tools"]
 
 
 def load_testcases(path: Path):
@@ -135,11 +132,9 @@ def log_error(
 # ============================================================
 
 def get_prompt(messages: list) -> str:
-    tool_prompt = get_tool_info()
 
     prompt = tokenizer.apply_chat_template(
         messages,
-        tools=tool_prompt,
         tokenize=False,
         add_generation_prompt=True,
     )
@@ -210,57 +205,34 @@ def gen_new_text(messages: list) -> tuple[str, dict]:
 # Tool call parser
 # ============================================================
 
-def extract_toolcall_block(text: str):
-    s = text.find("<TOOLCALL>[")
-    if s == -1:
-        return text, None
+def clean_sql_output(text: str) -> str:
+    text = text.strip()
 
-    e = text.find("]</TOOLCALL>", s)
-    if e == -1:
-        raise CGSimRunError(
-            "TOOLCALL_TAG_UNCLOSED",
-            "Found <TOOLCALL>[ but no closing ]</TOOLCALL>.",
-            raw_text=text,
-        )
+    # remove possible special tokens
+    text = text.split("<eot_id>")[0].strip()
+    text = text.split("<|eot_id|>")[0].strip()
 
-    array_json = text[s + len("<TOOLCALL>"): e + 1]
+    # remove markdown fences
+    if text.startswith("```"):
+        lines = text.splitlines()
 
-    try:
-        calls = json.loads(array_json)
-    except json.JSONDecodeError as err:
-        raise CGSimRunError(
-            "TOOLCALL_JSON_ERROR",
-            str(err),
-            array_json=array_json,
-            raw_text=text,
-        )
+        # remove first ```sql or ```
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
 
-    if not isinstance(calls, list):
-        raise CGSimRunError(
-            "TOOLCALL_NOT_LIST",
-            "Tool call block is not a JSON list.",
-            array_json=array_json,
-            raw_text=text,
-        )
+        # remove last ```
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
 
-    if len(calls) == 0:
-        raise CGSimRunError(
-            "EMPTY_TOOLCALL",
-            "Model generated <TOOLCALL>[]</TOOLCALL>.",
-            array_json=array_json,
-            raw_text=text,
-        )
+        text = "\n".join(lines).strip()
 
-    toolcall_block = calls[0]
+    # optional: keep only from first SELECT
+    upper = text.upper()
+    idx = upper.find("SELECT")
+    if idx != -1:
+        text = text[idx:].strip()
 
-    if not isinstance(toolcall_block, dict):
-        raise CGSimRunError(
-            "TOOLCALL_NOT_DICT",
-            "First tool call is not a JSON object.",
-            toolcall_block=toolcall_block,
-        )
-
-    return text[:s], toolcall_block
+    return text
 
 
 # ============================================================
@@ -309,7 +281,10 @@ def looks_like_sql_error_result(result) -> bool:
 # Main agent loop
 # ============================================================
 
-def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROUNDS):
+def test_ask_cgsim_finetuned_onlySQL(
+    usr_request: str,
+    cursor,
+):
     print("=" * 100)
     print("USER REQUEST:")
     print(usr_request)
@@ -317,10 +292,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
     messages = [
         {
             "role": "system",
-            "content": (
-                "You are a CGsim agent. Answer questions related to grid "
-                "simulation related questions. Use tools when needed."
-            ),
+            "content": SYSTEM_PROMPT,
         },
         {
             "role": "user",
@@ -329,154 +301,140 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
     ]
 
     last_model_output = None
-    seen_toolcalls = set()
 
     try:
-        for step in range(max_rounds):
-            gen_text, meta = gen_new_text(messages)
-            last_model_output = gen_text
+        # ============================================================
+        # Round 1: generate SQL
+        # ============================================================
+        sql_text, meta = gen_new_text(messages)
+        last_model_output = sql_text
 
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": gen_text,
-                }
+        print("RAW SQL GEN TEXT:")
+        print(sql_text)
+        print("GEN META:")
+        print(meta)
+
+        if meta.get("finish_reason") == "length":
+            raise CGSimRunError(
+                "SQL_GENERATION_LENGTH_CUTOFF",
+                "vLLM stopped because max_tokens was reached during SQL generation.",
+                finish_reason=meta.get("finish_reason"),
+                max_tokens=MAX_TOKENS,
+                raw_text=sql_text,
             )
 
-            print("RAW GEN TEXT:")
-            print(gen_text)
-            print("GEN META:")
-            print(meta)
+        sql = clean_sql_output(sql_text)
 
-            # Important: vLLM generation loop / cutoff detection
-            if meta.get("finish_reason") == "length":
-                raise CGSimRunError(
-                    "GENERATION_LENGTH_CUTOFF",
-                    (
-                        "vLLM stopped because max_tokens was reached. "
-                        "The model likely entered a long reasoning loop or failed to terminate."
-                    ),
-                    finish_reason=meta.get("finish_reason"),
-                    max_tokens=MAX_TOKENS,
-                    raw_text=gen_text,
-                )
-
-            think, toolcall_block = extract_toolcall_block(gen_text)
-
-            if toolcall_block is None:
-                answer = gen_text.split("<eot_id>")[0].strip()
-
-                if not answer:
-                    raise CGSimRunError(
-                        "EMPTY_FINAL_ANSWER",
-                        "No tool call and empty final answer.",
-                        raw_text=gen_text,
-                    )
-
-                print("FINAL ANSWER:")
-                print(answer)
-
-                return {
-                    "success": True,
-                    "answer": answer,
-                    "messages": messages,
-                    "elapsed": meta.get("elapsed")
-                }
-
-            if "name" not in toolcall_block:
-                raise CGSimRunError(
-                    "TOOLCALL_MISSING_NAME",
-                    "Tool call does not contain key 'name'.",
-                    toolcall_block=toolcall_block,
-                )
-
-            tool_name = toolcall_block["name"]
-            tool_args = ""
-
-            # Detect repeated toolcall loop
-            toolcall_signature = json.dumps(toolcall_block, sort_keys=True, ensure_ascii=False)
-            if toolcall_signature in seen_toolcalls:
-                raise CGSimRunError(
-                    "REPEATED_TOOLCALL_LOOP",
-                    "The model repeated the same tool call, likely stuck in a tool-use loop.",
-                    toolcall_block=toolcall_block,
-                )
-            seen_toolcalls.add(toolcall_signature)
-
-            if tool_name.startswith("check_"):
-                if not hasattr(dbt, tool_name):
-                    raise CGSimRunError(
-                        "UNKNOWN_CHECK_TOOL",
-                        f"Unknown check tool: {tool_name}",
-                        toolcall_block=toolcall_block,
-                    )
-
-                tool_result = getattr(dbt, tool_name)(cursor)
-
-            elif tool_name == "execute_sql":
-                try:
-                    tool_args = toolcall_block["arguments"]["sql"]
-                except Exception:
-                    raise CGSimRunError(
-                        "SQL_ARGUMENT_ERROR",
-                        "execute_sql tool call does not contain arguments.sql.",
-                        toolcall_block=toolcall_block,
-                    )
-
-                print("SQL:")
-                print(tool_args)
-
-                try:
-                    tool_result = dbt.execute_sql(cursor, tool_args)
-                except sqlite3.Error as e:
-                    raise CGSimRunError(
-                        "SQL_EXECUTION_ERROR",
-                        str(e),
-                        sql=tool_args,
-                        toolcall_block=toolcall_block,
-                    )
-                except Exception as e:
-                    raise CGSimRunError(
-                        "SQL_TOOL_RUNTIME_ERROR",
-                        str(e),
-                        sql=tool_args,
-                        toolcall_block=toolcall_block,
-                    )
-
-                if looks_like_sql_error_result(tool_result):
-                    raise CGSimRunError(
-                        "SQL_HALLUCINATION_OR_EXECUTION_ERROR",
-                        "SQL result appears to contain an execution/schema error.",
-                        sql=tool_args,
-                        tool_result=tool_result,
-                    )
-
-                if is_empty_sql_result(tool_result):
-                    raise CGSimRunError(
-                        "SQL_EMPTY_RESULT",
-                        "SQL executed but returned empty result.",
-                        sql=tool_args,
-                        tool_result=tool_result,
-                    )
-
-            else:
-                raise CGSimRunError(
-                    "UNKNOWN_TOOL",
-                    f"Unknown tool name: {tool_name}",
-                    toolcall_block=toolcall_block,
-                )
-
-            messages.append(
-                {
-                    "role": "tool",
-                    "content": json.dumps(tool_result, ensure_ascii=False, default=str),
-                }
+        if not sql:
+            raise CGSimRunError(
+                "EMPTY_SQL",
+                "Model generated empty SQL.",
+                raw_text=sql_text,
             )
 
-        raise CGSimRunError(
-            "MAX_ROUNDS_EXCEEDED",
-            f"Exceeded max_rounds={max_rounds}.",
+        print("SQL:")
+        print(sql)
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": sql,
+            }
         )
+
+        # ============================================================
+        # Execute SQL
+        # ============================================================
+        try:
+            sql_result = dbt.execute_sql(cursor, sql)
+        except sqlite3.Error as e:
+            raise CGSimRunError(
+                "SQL_EXECUTION_ERROR",
+                str(e),
+                sql=sql,
+                raw_text=sql_text,
+            )
+        except Exception as e:
+            raise CGSimRunError(
+                "SQL_TOOL_RUNTIME_ERROR",
+                str(e),
+                sql=sql,
+                raw_text=sql_text,
+            )
+
+        if looks_like_sql_error_result(sql_result):
+            raise CGSimRunError(
+                "SQL_HALLUCINATION_OR_EXECUTION_ERROR",
+                "SQL result appears to contain an execution/schema error.",
+                sql=sql,
+                sql_result=sql_result,
+            )
+
+        if is_empty_sql_result(sql_result):
+            raise CGSimRunError(
+                "SQL_EMPTY_RESULT",
+                "SQL executed but returned empty result.",
+                sql=sql,
+                sql_result=sql_result,
+            )
+
+        print("SQL RESULT:")
+        print(sql_result)
+
+        # ============================================================
+        # Round 2: generate final answer from SQL result
+        # ============================================================
+        messages.append(
+            {
+                "role": "tool",
+                "content": json.dumps(sql_result, ensure_ascii=False, default=str),
+            }
+        )
+
+        answer_text, meta2 = gen_new_text(messages)
+        last_model_output = answer_text
+
+        print("RAW ANSWER GEN TEXT:")
+        print(answer_text)
+        print("GEN META:")
+        print(meta2)
+
+        if meta2.get("finish_reason") == "length":
+            raise CGSimRunError(
+                "ANSWER_GENERATION_LENGTH_CUTOFF",
+                "vLLM stopped because max_tokens was reached during answer generation.",
+                finish_reason=meta2.get("finish_reason"),
+                max_tokens=MAX_TOKENS,
+                raw_text=answer_text,
+            )
+
+        answer = answer_text.split("<eot_id>")[0].strip()
+
+        if not answer:
+            raise CGSimRunError(
+                "EMPTY_FINAL_ANSWER",
+                "Model generated empty final answer.",
+                raw_text=answer_text,
+            )
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+            }
+        )
+
+        print("FINAL ANSWER:")
+        print(answer)
+
+        return {
+            "success": True,
+            "sql": sql,
+            "sql_result": sql_result,
+            "answer": answer,
+            "messages": messages,
+            "elapsed": meta.get("elapsed") + meta2.get("elapsed")
+        }
 
     except CGSimRunError as e:
         log_error(
@@ -485,7 +443,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             last_model_output=last_model_output,
             error_type=e.error_type,
             error_message=str(e),
-            step=step if "step" in locals() else None,
+            step=None,
             extra=e.extra,
         )
 
@@ -493,6 +451,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
 
         return {
             "success": False,
+            "sql": e.extra.get("sql"),
             "answer": None,
             "messages": messages,
             "error_type": e.error_type,
@@ -506,7 +465,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
             last_model_output=last_model_output,
             error_type="UNEXPECTED_ERROR",
             error_message=str(e),
-            step=step if "step" in locals() else None,
+            step=None,
             extra={"traceback": traceback.format_exc()},
         )
 
@@ -514,6 +473,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
 
         return {
             "success": False,
+            "sql": None,
             "answer": None,
             "messages": messages,
             "error_type": "UNEXPECTED_ERROR",
@@ -536,6 +496,8 @@ def main():
 
     error_counter = {}
 
+    gen_output = open(GENRES_PATH, 'w')
+
     try:
         for idx, usr_request, raw_case in load_testcases(TESTDATA_PATH):
             print("=" * 100)
@@ -543,23 +505,26 @@ def main():
 
             n_total += 1
 
-            result = test_ask_cgsim_finetuned(usr_request, cursor)
+            result = test_ask_cgsim_finetuned_onlySQL(usr_request, cursor)
 
             if result["success"]:
                 n_success += 1
                 t_success += result["elapsed"]
+                success_execute = {"user_question": usr_request, "sql": result["sql"], "answer": result["answer"]}
+                gen_output.write(json.dumps(success_execute, ensure_ascii=False, default=str) + "\n")
             else:
                 n_failed += 1
                 err = result.get("error_type", "UNKNOWN")
                 error_counter[err] = error_counter.get(err, 0) + 1
 
         success_rate = n_success*1.0/n_total
-        p95_cl = 1.95 * np.sqrt( success_rate*(1-success_rate)/n_total )
+        p68_cl = np.sqrt( success_rate*(1-success_rate)/n_total )
 
         print("=" * 100)
         print("BENCHMARK SUMMARY")
         print(f"Total:   {n_total}")
         print(f"Success: {n_success}")
+        print(f"Success rate: ({success_rate*100:.2f} ± {p68_cl*100:.2f})%")
         print(f"Average Time for Succeeded Generation: {t_success/n_success} s")
         print(f"Failed:  {n_failed}")
         print("Error breakdown:")
@@ -570,9 +535,10 @@ def main():
         
         with open(str(BENCHMARK_REPORT_PATH), 'w') as f:
             f.write("BENCHMARK SUMMARY\n")
+            f.write(f"Input TestCase: {TESTDATA_PATH}\n")
             f.write(f"Total:   {n_total}\n")
             f.write(f"Success: {n_success}\n")
-            print(f"Success rate: ({success_rate*100:.2f} ± {p95_cl*100:.2f})%")
+            f.write(f"Success rate: ({success_rate*100:.2f} ± {p68_cl*100:.2f})% ")
             f.write(f"Average Time for Succeeded Generation: {t_success/n_success} s\n")
             f.write(f"Failed: {n_failed}\n")
             f.write("Error breakdown:\n")
@@ -584,6 +550,7 @@ def main():
         cursor.close()
         conn.close()
 
+    gen_output.close()
 
 if __name__ == "__main__":
     main()

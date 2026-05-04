@@ -17,15 +17,25 @@ export HF_HUB_CACHE=$PSCRATCH/.hf/hub
 export CUDA_VISIBLE_DEVICES="$(echo "${CUDA_VISIBLE_DEVICES:-0}" | cut -d, -f1)"
 echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
-BASE_MODEL_ID="AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim"
+CONFIG="${DEPLOY_CONFIG:-Deployment/config_CoT.json}"
+BASE_MODEL_ID=$(jq -r '.WL_BENCH.BASE_MODEL' "$CONFIG")
+LORA_ADAPTER=$(jq -r '.WL_BENCH.ADAPTER' "$CONFIG")
+INFO_FILE=$PSCRATCH/$(jq -r '.WL_BENCH.VLLM_INFO_PATH' "$CONFIG")
+
+
+echo "================================================================================"
+echo "CONFIG: ${CONFIG}"
+echo "BASE MODEL: ${BASE_MODEL_ID}"
+echo "LORA ADAPTER: ${LORA_ADAPTER}"
+echo "INFO FILE: ${INFO_FILE}"
+echo "================================================================================"
+
 SERVED_MODEL_NAME="askcgsim-base"
 LORA_MODEL_NAME="askcgsim-ft"
-LORA_ADAPTER="$PSCRATCH/run/nemotron-llama8b-CGsim_highqual_v1/checkpoints/checkpoint-100"
 
 PORT=$((18000 + SLURM_JOB_ID % 20000))
 
 GPU_NODE=$(hostname -s)
-INFO_FILE=$PSCRATCH/FineTunedLLM_V1_vllm.env
 
 cat > "$INFO_FILE" <<EOF
 GPU_NODE=$GPU_NODE

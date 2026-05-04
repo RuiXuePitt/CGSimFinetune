@@ -3,7 +3,7 @@
 # Quick Deploy MERGED Fine Tuned Model Through vLLM, using salloc
 # Rui Xue
 
-salloc -C "gpu&hbm40g" -q interactive -t 01:00:00 -A m2616_g --gpus 1 srun --pty bash -lc '
+salloc -C "gpu&hbm40g" -q interactive -t 00:30:00 -A m2616_g --gpus 1 srun --pty bash -lc '
 echo "================================================================================"
 echo "RUN QUICK FineTuned Model vLLM Deploy"
 echo "================================================================================"
@@ -17,7 +17,7 @@ export HF_HUB_CACHE=$PSCRATCH/.hf/hub
 export CUDA_VISIBLE_DEVICES="$(echo "${CUDA_VISIBLE_DEVICES:-0}" | cut -d, -f1)"
 echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
-MODEL_ID="AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim-FineTuneV1"
+MODEL_ID="AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim-FineTuneV2"
 SERVED_MODEL_NAME="askcgsim-finetunev1"
 
 PORT=$((18000 + SLURM_JOB_ID % 20000))

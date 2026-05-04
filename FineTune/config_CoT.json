@@ -1,22 +1,22 @@
 {
     "STEP_1": {
         "BASE_MODEL": "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim",
-        "VERSION": "nemotron-llama8b-CGsim_structured_v1_2",
-        "TRAINDATA": "$PSCRATCH/resources/AI_QA_v1/train_structured_QA_v1_2.jsonl",
+        "VERSION": "nemotron-llama8b-CGsim_structured_CoT_new",
+        "TRAINDATA": "$PSCRATCH/resources/AI_QA_v1/train_structured_QA_v1.jsonl",
         "OUTPUT_DIR": "$PSCRATCH/run"
     },
     "STEP_2": {
         "BASE_MODEL": "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim",
-        "LORA_ADAPTER": "$PSCRATCH/run/nemotron-llama8b-CGsim_structured_v1_2/checkpoint-57",
-        "VERSION": "nemotron-llama8b-CGsim_highqual_v1_2",
-        "TRAINDATA": "$PSCRATCH/resources/AI_QA_v1/train_structured_QA_v1_2.jsonl",
+        "LORA_ADAPTER": "$PSCRATCH/run/nemotron-llama8b-CGsim_structured_CoT_new/checkpoints/checkpoint-57",
+        "VERSION": "nemotron-llama8b-CGsim_highqual_CoT_new",
+        "TRAINDATA": "$PSCRATCH/resources/AI_QA_v1/train_AI_QA_dataset_v1.jsonl",
         "OUTPUT_DIR": "$PSCRATCH/run"
     },
     "STEP_3": {
         "BASE_MODEL": "AI4SciNoob/Llama-3.1-Nemotron-Nano-8B-v1-AskCGSim",
-        "LORA_ADAPTER": "$PSCRATCH/run/nemotron-llama8b-CGsim_highqual_v1_2/checkpoints/checkpoint-210",
-        "VERSION": "nemotron-llama8b-CGsim_highqual_v1_2_weightedloss",
-        "TRAINDATA": "$PSCRATCH/resources/AI_QA_v1/train_structured_QA_v1_2.jsonl",
+        "LORA_ADAPTER": "$PSCRATCH/run/nemotron-llama8b-CGsim_highqual_CoT_new/checkpoints/checkpoint-210",
+        "VERSION": "nemotron-llama8b-CGsim_highqual_CoT_weightedloss_new",
+        "TRAINDATA": "$PSCRATCH/resources/AI_QA_v1/train_AI_QA_dataset_v1.jsonl",
         "OUTPUT_DIR": "$PSCRATCH/run"
     },
     "MERGE_N_UPLOAD": {

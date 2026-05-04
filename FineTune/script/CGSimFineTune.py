@@ -16,7 +16,10 @@ from datasets import Dataset
 from pathlib import Path
 import math
 
-
+# ============================================================
+# Config
+# ============================================================
+SEED = 42
 TRAINDATA = os.path.expandvars(STEP_1_CONFIG["TRAINDATA"])
 REPOID = STEP_1_CONFIG["BASE_MODEL"]
 VERSION = STEP_1_CONFIG["VERSION"]
@@ -26,15 +29,20 @@ checkpoint_dir = str(OUTPUT_DIR / VERSION / "checkpoints")
 logging_dir = str(OUTPUT_DIR / VERSION / "logs")
 lossplot_dir = str(OUTPUT_DIR / VERSION)
 fig_path = str(Path(lossplot_dir) / "lossplot_Structured.png")
+# ============================================================
 
 os.makedirs(checkpoint_dir, exist_ok=True)
 os.makedirs(logging_dir, exist_ok=True)
 os.makedirs(lossplot_dir, exist_ok=True)
 
 from transformers import (
-    AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
+    set_seed, AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
     TrainingArguments, Trainer, DataCollatorForSeq2Seq)
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+
+# ============================================================
+set_seed(SEED)
+# ============================================================
 
 def load_data():
     '''
@@ -59,14 +67,10 @@ def load_tokenizer(repo_id: str):
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 
-
-# def process_data():
-#     train_data = load_data()
-#     tokenizer = load_tokenizer(repo_id)
-#     ds = Dataset.from_list(train_data)
-#     processed_ds = ds.map(lambda x: tt.tokenize_and_mask(x, tokenizer), remove_columns=ds.column_names)
-#     return processed_ds
 def process_data(tokenizer):
+    """
+    CoT + Tool Calling
+    """
     train_data = load_data()
     ds = Dataset.from_list(train_data)
 
@@ -92,6 +96,35 @@ def process_data(tokenizer):
         remove_columns=ds.column_names
     )
     return processed_ds
+
+# def process_data(tokenizer):
+#     """
+#     Only SQL
+#     """
+#     train_data = load_data()
+#     ds = Dataset.from_list(train_data)
+
+#     def get_len(x):
+#         text = tokenizer.apply_chat_template(
+#             x["messages"],
+#             tokenize=False,
+#             add_generation_prompt=False,
+#         )
+#         enc = tokenizer(text, truncation=False, add_special_tokens=False)
+#         return {"seq_len": len(enc["input_ids"])}
+
+#     len_ds = ds.map(get_len)
+#     max_len = max(len_ds["seq_len"])
+#     max_length = math.ceil(max_len / 1024) * 1024
+
+#     print("raw max token length:", max_len)
+#     print("rounded max_length:", max_length)
+
+#     processed_ds = ds.map(
+#         lambda x: tt.tokenize_and_mask_onlySQL(x, tokenizer, max_length=max_length),
+#         remove_columns=ds.column_names
+#     )
+#     return processed_ds
 
 def load_QLoRA_Model(repo_id: str):
     '''
@@ -171,6 +204,11 @@ def set_train_config(model, processed_ds, tokenizer):
         learning_rate=1e-4,
         bf16=True,
         optim="paged_adamw_8bit",
+
+        seed=SEED,
+        data_seed=SEED,
+        dataloader_num_workers=0,
+
         logging_dir=logging_dir,        # Directory for storing logs
         save_strategy="steps",       # Save the model checkpoint every logging step
         save_steps=save_steps,                # Save checkpoints every 100 steps
@@ -182,7 +220,7 @@ def set_train_config(model, processed_ds, tokenizer):
         report_to="none"
     )
 
-    splits = processed_ds.train_test_split(test_size=0.1, seed=42)
+    splits = processed_ds.train_test_split(test_size=0.1, seed=SEED)
     train_ds = splits["train"]
     eval_ds  = splits["test"]
 
