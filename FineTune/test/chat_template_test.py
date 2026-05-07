@@ -22,8 +22,8 @@ tokenizer = AutoTokenizer.from_pretrained(REPOID)
 
 def main():
     datasample = tt.load_data(TRAINDATA)[0]
-    # feat = tt.tokenize_and_mask_onlySQL(datasample, tokenizer, max_length=4096)
-    feat = tt.tokenize_and_mask(datasample, tokenizer, max_length=4096)
+    feat = tt.tokenize_and_mask_onlySQL(datasample, tokenizer, max_length=4096)
+    # feat = tt.tokenize_and_mask(datasample, tokenizer, max_length=4096)
     full_text, trained_text = tt.render_masked_view(
         feat["input_ids"], feat["labels"], tokenizer, mask_token="█"
     )

@@ -12,6 +12,7 @@ import numpy as np
 import traceback
 from pathlib import Path
 from Deployment.config_loader import DEPLOYMENT_DIR, BENCHMARK_CONFIG, HIGHQUAL_BENCH
+from Deployment.benchmark.v1.client_utils import wait_vllm_ready, clean_sql_output
 
 # ============================================================
 # Project path
@@ -50,7 +51,7 @@ TOOL_PATH = RESOURCE_DIR / BENCHMARK_CONFIG["TOOLPROMPT"]
 GENRES_PATH = OUTPUT_DIR / BENCHMARK_CONFIG["SUCCESS_RES"]
 ERROR_PATH = OUTPUT_DIR / BENCHMARK_CONFIG["ERR_MSG"]
 BENCHMARK_REPORT_PATH = OUTPUT_DIR / BENCHMARK_CONFIG["BENCH_REPORT"]
-
+ONLYSQL = HIGHQUAL_BENCH.get("onlySQL")
 VLLM_INFO_PATH = Path(pscratch) / HIGHQUAL_BENCH["VLLM_INFO_PATH"]
 print(VLLM_INFO_PATH)
 
@@ -149,6 +150,15 @@ def get_prompt(messages: list) -> str:
 
     return prompt
 
+def get_prompt_onlySQL(messages: list) -> str:
+
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+    return prompt
 
 def poster(prompt: str) -> tuple[str, dict]:
     file_info = load_info_file(VLLM_INFO_PATH)
@@ -206,6 +216,9 @@ def gen_new_text(messages: list) -> tuple[str, dict]:
     prompt = get_prompt(messages)
     return poster(prompt)
 
+def gen_new_text_onlySQL(messages: list) -> tuple[str, dict]:
+    prompt = get_prompt_onlySQL(messages)
+    return poster(prompt)
 
 # ============================================================
 # Tool call parser
@@ -478,7 +491,6 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
 
         return {
             "success": False,
-            "answer": None,
             "messages": messages,
             "error_type": e.error_type,
             "error_message": str(e),
@@ -498,18 +510,209 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
 
         return {
             "success": False,
-            "answer": None,
             "messages": messages,
             "error_type": "UNEXPECTED_ERROR",
             "error_message": str(e),
         }
 
+def test_ask_cgsim_finetuned_onlySQL(
+    usr_request: str,
+    cursor,
+):
+    print("=" * 100)
+    print("USER REQUEST:")
+    print(usr_request)
 
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": usr_request,
+        },
+    ]
+
+    last_model_output = None
+
+    try:
+        # ============================================================
+        # Round 1: generate SQL
+        # ============================================================
+        sql_text, meta = gen_new_text_onlySQL(messages)
+        last_model_output = sql_text
+
+        print("RAW SQL GEN TEXT:")
+        print(sql_text)
+        print("GEN META:")
+        print(meta)
+
+        if meta.get("finish_reason") == "length":
+            raise CGSimRunError(
+                "SQL_GENERATION_LENGTH_CUTOFF",
+                "vLLM stopped because max_tokens was reached during SQL generation.",
+                finish_reason=meta.get("finish_reason"),
+                max_tokens=MAX_TOKENS,
+                raw_text=sql_text,
+            )
+
+        sql = clean_sql_output(sql_text)
+
+        if not sql:
+            raise CGSimRunError(
+                "EMPTY_SQL",
+                "Model generated empty SQL.",
+                raw_text=sql_text,
+            )
+
+        print("SQL:")
+        print(sql)
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": sql,
+            }
+        )
+
+        # ============================================================
+        # Execute SQL
+        # ============================================================
+        try:
+            sql_result = dbt.execute_sql(cursor, sql)
+        except sqlite3.Error as e:
+            raise CGSimRunError(
+                "SQL_EXECUTION_ERROR",
+                str(e),
+                sql=sql,
+                raw_text=sql_text,
+            )
+        except Exception as e:
+            raise CGSimRunError(
+                "SQL_TOOL_RUNTIME_ERROR",
+                str(e),
+                sql=sql,
+                raw_text=sql_text,
+            )
+
+        if looks_like_sql_error_result(sql_result):
+            raise CGSimRunError(
+                "SQL_HALLUCINATION_OR_EXECUTION_ERROR",
+                "SQL result appears to contain an execution/schema error.",
+                sql=sql,
+                sql_result=sql_result,
+            )
+
+        if is_empty_sql_result(sql_result):
+            raise CGSimRunError(
+                "SQL_EMPTY_RESULT",
+                "SQL executed but returned empty result.",
+                sql=sql,
+                sql_result=sql_result,
+            )
+
+        print("SQL RESULT:")
+        print(sql_result)
+
+        # ============================================================
+        # Round 2: generate final answer from SQL result
+        # ============================================================
+        messages.append(
+            {
+                "role": "tool",
+                "content": json.dumps(sql_result, ensure_ascii=False, default=str),
+            }
+        )
+
+        answer_text, meta2 = gen_new_text(messages)
+        last_model_output = answer_text
+
+        print("RAW ANSWER GEN TEXT:")
+        print(answer_text)
+        print("GEN META:")
+        print(meta2)
+
+        if meta2.get("finish_reason") == "length":
+            raise CGSimRunError(
+                "ANSWER_GENERATION_LENGTH_CUTOFF",
+                "vLLM stopped because max_tokens was reached during answer generation.",
+                finish_reason=meta2.get("finish_reason"),
+                max_tokens=MAX_TOKENS,
+                raw_text=answer_text,
+            )
+
+        answer = answer_text.split("<eot_id>")[0].strip()
+
+        if not answer:
+            raise CGSimRunError(
+                "EMPTY_FINAL_ANSWER",
+                "Model generated empty final answer.",
+                raw_text=answer_text,
+            )
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+            }
+        )
+
+        print("FINAL ANSWER:")
+        print(answer)
+
+        return {
+            "success": True,
+            "sql": sql,
+            "sql_result": sql_result,
+            "answer": answer,
+            "messages": messages,
+            "elapsed": meta.get("elapsed") + meta2.get("elapsed")
+        }
+
+    except CGSimRunError as e:
+        log_error(
+            user_request=usr_request,
+            messages=messages,
+            last_model_output=last_model_output,
+            error_type=e.error_type,
+            error_message=str(e),
+            step=None
+        )
+
+        print(f"[FAILED] {e.error_type}: {e}")
+
+        return {
+            "success": False,
+            "messages": messages,
+            "error_type": e.error_type,
+            "error_message": str(e),
+        }
+
+    except Exception as e:
+        log_error(
+            user_request=usr_request,
+            messages=messages,
+            last_model_output=last_model_output,
+            error_type="UNEXPECTED_ERROR",
+            error_message=str(e),
+            step=None
+        )
+
+        print(f"[FAILED] UNEXPECTED_ERROR: {e}")
+
+        return {
+            "success": False,
+            "messages": messages,
+            "error_type": "UNEXPECTED_ERROR",
+            "error_message": str(e),
+        }
 # ============================================================
 # Benchmark main
 # ============================================================
 
 def main():
+    wait_vllm_ready(VLLM_INFO_PATH)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -528,12 +731,17 @@ def main():
 
             n_total += 1
 
-            result = test_ask_cgsim_finetuned(usr_request, cursor)
+            if (ONLYSQL):
+                print("\n Testing with ONLY SQL data.\n")
+                result = test_ask_cgsim_finetuned_onlySQL(usr_request, cursor)
+            else:
+                print("\n Testing with TOOL CALLING data.\n")
+                result = test_ask_cgsim_finetuned(usr_request, cursor)
 
             if result["success"]:
                 n_success += 1
                 t_success += result["elapsed"]
-                success_execute = {"user_question": usr_request, "checktool": result["checktool"], "sql": result["sql"], "answer": result["answer"]}
+                success_execute = {"user_question": usr_request, "checktool": result.get("checktool"), "sql": result["sql"], "answer": result["answer"]}
                 gen_output.write(json.dumps(success_execute, ensure_ascii=False, default=str) + "\n")
             else:
                 n_failed += 1

@@ -22,6 +22,7 @@ TRAINDATA = os.path.expandvars(STEP_2_CONFIG["TRAINDATA"])
 REPOID = STEP_2_CONFIG["BASE_MODEL"]
 VERSION = STEP_2_CONFIG["VERSION"]
 OUTPUT_DIR = Path(os.path.expandvars(STEP_2_CONFIG["OUTPUT_DIR"]))
+ONLYSQL = STEP_2_CONFIG.get("onlySQL", False)
 
 ADAPTER = os.path.expandvars(STEP_2_CONFIG["LORA_ADAPTER"])
 CHECKPOINT_DIR = str(OUTPUT_DIR / VERSION / "checkpoints")
@@ -100,34 +101,34 @@ def process_data(tokenizer):
     )
     return processed_ds
 
-# def process_data(tokenizer):
-#     """
-#     Only SQL
-#     """
-#     train_data = load_data()
-#     ds = Dataset.from_list(train_data)
+def process_data_onlySQL(tokenizer):
+    """
+    Only SQL
+    """
+    train_data = load_data()
+    ds = Dataset.from_list(train_data)
 
-#     def get_len(x):
-#         text = tokenizer.apply_chat_template(
-#             x["messages"],
-#             tokenize=False,
-#             add_generation_prompt=False,
-#         )
-#         enc = tokenizer(text, truncation=False, add_special_tokens=False)
-#         return {"seq_len": len(enc["input_ids"])}
+    def get_len(x):
+        text = tokenizer.apply_chat_template(
+            x["messages"],
+            tokenize=False,
+            add_generation_prompt=False,
+        )
+        enc = tokenizer(text, truncation=False, add_special_tokens=False)
+        return {"seq_len": len(enc["input_ids"])}
 
-#     len_ds = ds.map(get_len)
-#     max_len = max(len_ds["seq_len"])
-#     max_length = min(math.ceil(max_len / 1024) * 1024, 8192)
+    len_ds = ds.map(get_len)
+    max_len = max(len_ds["seq_len"])
+    max_length = min(math.ceil(max_len / 1024) * 1024, 8192)
 
-#     print("raw max token length:", max_len)
-#     print("rounded max_length:", max_length)
+    print("raw max token length:", max_len)
+    print("rounded max_length:", max_length)
 
-#     processed_ds = ds.map(
-#         lambda x: tt.tokenize_and_mask_onlySQL(x, tokenizer, max_length=max_length),
-#         remove_columns=ds.column_names
-#     )
-#     return processed_ds
+    processed_ds = ds.map(
+        lambda x: tt.tokenize_and_mask_onlySQL(x, tokenizer, max_length=max_length),
+        remove_columns=ds.column_names
+    )
+    return processed_ds
 
 def load_QLoRA_Model(base_model_id: str):
     '''
@@ -240,7 +241,12 @@ def train():
     Futher Train a finetuned model.
     '''
     tokenizer = load_tokenizer(REPOID)
-    processed_ds = process_data(tokenizer)
+    if (ONLYSQL):
+        print("\nTraining with ONLY SQL data.\n")
+        processed_ds = process_data_onlySQL(tokenizer)
+    else:
+        print("\nTraining with TOOL CALLING data.\n")
+        processed_ds = process_data(tokenizer)
     ft_model = load_QLoRA_Model(REPOID)
     trainer = set_train_config(ft_model, processed_ds, tokenizer)
     out = trainer.train()

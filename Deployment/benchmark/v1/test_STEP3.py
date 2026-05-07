@@ -12,6 +12,7 @@ import numpy as np
 import traceback
 from pathlib import Path
 from Deployment.config_loader import DEPLOYMENT_DIR, BENCHMARK_CONFIG, WL_BENCH
+from Deployment.benchmark.v1.client_utils import wait_vllm_ready
 
 # ============================================================
 # Project path
@@ -536,6 +537,7 @@ def test_ask_cgsim_finetuned(usr_request: str, cursor, max_rounds: int = MAX_ROU
 # ============================================================
 
 def main():
+    wait_vllm_ready(VLLM_INFO_PATH)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
